@@ -14,16 +14,14 @@ import           Data.Aeson.TH
 import           Data.ByteString.Lazy (ByteString)
 import           Data.Int
 import           Data.Text            (Text)
+import           GHC.Generics
 
 data FiatPlayer = FiatPlayer Int64
-  deriving (Eq,Ord,Show)
+  deriving (Eq,Ord,Show,Generic)
 $(deriveJSON defaultOptions ''FiatPlayer)
 data FiatMove m = FiatMove FiatPlayer m
-  deriving (Eq,Ord,Show,Functor)
+  deriving (Eq,Ord,Show,Generic,Functor)
 $(deriveJSON defaultOptions ''FiatMove)
-data FiatGameState m = FiatGameState FiatPlayer m
-  deriving (Eq,Ord,Show,Functor)
-$(deriveJSON defaultOptions ''FiatGameState)
 
 class (ToJSON gDTO, FromJSON gDTO, ToJSON m, FromJSON m) => FiatGame g gDTO m | g -> m, g -> gDTO where
   initialState :: g
