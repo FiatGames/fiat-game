@@ -15,7 +15,9 @@ import           Data.ByteString.Lazy (ByteString)
 import           Data.Int
 import           Data.Text            (Text)
 
-type FiatPlayer = Int64
+data FiatPlayer = FiatPlayer Int64
+  deriving (Eq,Ord,Show)
+$(deriveJSON defaultOptions ''FiatPlayer)
 data FiatMove m = FiatMove FiatPlayer m
   deriving (Eq,Ord,Show,Functor)
 $(deriveJSON defaultOptions ''FiatMove)

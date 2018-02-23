@@ -20,16 +20,16 @@ instance FiatGame NoGame NoGame () where
   makeMove A _ = Right B
   makeMove B _ = Right A
   playerAllowed :: NoGame -> FiatPlayer -> FiatMove () -> Bool
-  playerAllowed A _ (FiatMove 0 _) = True
-  playerAllowed B _ (FiatMove 1 _) = True
-  playerAllowed _ _ _              = False
+  playerAllowed A _ (FiatMove (FiatPlayer 0) _) = True
+  playerAllowed B _ (FiatMove (FiatPlayer 1) _) = True
+  playerAllowed _ _ _                           = False
   gameStateIso = iso id id
 
 badTurnOrder :: [ByteString]
-badTurnOrder = map encode [FiatMove 0 (), FiatMove 0 ()]
+badTurnOrder = map encode [FiatMove (FiatPlayer 0) (), FiatMove (FiatPlayer 0) ()]
 
 goodGame :: [ByteString]
-goodGame = map encode [FiatMove 0 (), FiatMove 1 ()]
+goodGame = map encode [FiatMove (FiatPlayer 0) (), FiatMove (FiatPlayer 1) ()]
 
 main :: IO ()
 main = hspec $
