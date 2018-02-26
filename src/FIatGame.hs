@@ -7,7 +7,6 @@
 
 module FiatGame where
 
-import           Control.Lens
 import           Control.Monad
 import           Data.Aeson
 import           Data.Aeson.TH
@@ -27,7 +26,7 @@ class (ToJSON gDTO, FromJSON gDTO, ToJSON m, FromJSON m) => FiatGame g gDTO m | 
   initialState :: g
   makeMove :: g -> FiatMove m -> Either Text g
   playerAllowed :: g -> FiatPlayer -> FiatMove m -> Bool
-  gameStateIso :: Iso' g gDTO
+  makeDTO :: FiatPlayer -> g -> gDTO
 
 note :: Text -> Maybe a -> Either Text a
 note t = maybe (Left t) Right

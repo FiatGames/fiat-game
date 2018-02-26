@@ -4,7 +4,6 @@
 {-# LANGUAGE OverloadedStrings     #-}
 {-# LANGUAGE TemplateHaskell       #-}
 
-import           Control.Lens
 import           Data.Aeson
 import           Data.Aeson.TH
 import           Data.ByteString.Lazy (ByteString)
@@ -23,7 +22,7 @@ instance FiatGame NoGame NoGame () where
   playerAllowed A _ (FiatMove (FiatPlayer 0) _) = True
   playerAllowed B _ (FiatMove (FiatPlayer 1) _) = True
   playerAllowed _ _ _                           = False
-  gameStateIso = iso id id
+  makeDTO _ = id
 
 badTurnOrder :: [ByteString]
 badTurnOrder = map encode [FiatMove (FiatPlayer 0) (), FiatMove (FiatPlayer 0) ()]
@@ -35,6 +34,6 @@ main :: IO ()
 main = hspec $
   describe "FiatGame" $ do
     it "playGame works"
-      $ encode (view gameStateIso <$> (playGame goodGame :: Either Text NoGame)) `shouldBe` "{\"Right\":\"A\"}"
+      $ encode (makeDTO (FiatPlayer 1) <$> (playGame goodGame :: Either Text NoGame)) `shouldBe` "{\"Right\":\"A\"}"
     it "playerAllowed works"
-      $ encode (view gameStateIso <$> (playGame badTurnOrder :: Either Text NoGame)) `shouldBe` "{\"Left\":\"That player is not allowed to make that move\"}"
+      $ encode (makeDTO (FiatPlayer 1) <$> (playGame badTurnOrder :: Either Text NoGame)) `shouldBe` "{\"Left\":\"That player is not allowed to make that move\"}"
