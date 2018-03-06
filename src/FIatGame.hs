@@ -28,11 +28,11 @@ data FutureMove m = FutureMove UTCTime (FiatMove m)
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''FutureMove)
 
-data FiatGameState g m = FiatGameState g [FutureMove m]
+data FiatGameState g s m = FiatGameState g s [FutureMove m]
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''FiatGameState)
 
-data FiatMoveError = Unauthorized | NotYourTurn | DecodeError Text
+data FiatMoveError = Invalid | Unauthorized | NotYourTurn | DecodeError Text
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''FiatMoveError)
 
@@ -42,23 +42,26 @@ newtype FiatGameStateMsg = FiatGameStateMsg ByteString
 newtype FiatMoveMsg = FiatMoveMsg ByteString
   deriving (Eq,Show,Generic)
 
-class (ToJSON m, FromJSON m, ToJSON g, FromJSON g) => FiatGame g m | g -> m where
-  makeMove :: FiatGameState g m -> FiatMove m -> Either FiatMoveError (FiatGameState g m)
-  isPlayersTurn :: FiatGameState g m -> FiatMove m -> Bool
-  moveAuthorized :: FiatGameState g m -> FiatPlayer -> FiatMove m -> Bool
-  moveAuthorized _ System _                                     = True
-  moveAuthorized _ (FiatPlayer _) (FiatMove System _)           = False
-  moveAuthorized _ (FiatPlayer p1) (FiatMove (FiatPlayer p2) _) = p1 == p2
-  processFromWebSocket :: FiatPlayer -> FiatGameStateMsg -> FiatMoveMsg -> Either FiatMoveError (FiatGameState g m)
+class (ToJSON m, FromJSON m, ToJSON g, FromJSON g, ToJSON s, FromJSON s) => FiatGame g s m | g -> m, g -> s where
+  initial :: s -> FiatGameState g s m
+  makeMove :: FiatGameState g s m -> FiatMove m -> FiatGameState g s m
+  isPlayersTurn :: FiatGameState g s m -> FiatMove m -> Bool
+  isMoveValid :: FiatGameState g s m -> FiatMove m -> Bool
+  isMoveAuthorized :: FiatGameState g s m -> FiatPlayer -> FiatMove m -> Bool
+  isMoveAuthorized _ System _                                     = True
+  isMoveAuthorized _ (FiatPlayer _) (FiatMove System _)           = False
+  isMoveAuthorized _ (FiatPlayer p1) (FiatMove (FiatPlayer p2) _) = p1 == p2
+  processFromWebSocket :: FiatPlayer -> FiatGameStateMsg -> FiatMoveMsg -> Either FiatMoveError (FiatGameState g s m)
   processFromWebSocket p (FiatGameStateMsg egs) (FiatMoveMsg emv) = do
     gs <- over _Left (DecodeError . pack) $ eitherDecode egs
     mv <- over _Left (DecodeError . pack) $ eitherDecode emv
-    boolToEither Unauthorized $ moveAuthorized gs p mv
+    boolToEither Unauthorized $ isMoveAuthorized gs p mv
     let isSystem = case mv of
                     (FiatMove System _) -> True
                     _                   -> False
     boolToEither NotYourTurn $ isSystem || isPlayersTurn gs mv
-    makeMove gs mv
+    boolToEither Invalid $ isMoveValid gs mv
+    return $ makeMove gs mv
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
