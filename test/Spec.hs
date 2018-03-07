@@ -28,7 +28,7 @@ $(deriveJSON defaultOptions ''NoMoves)
 
 instance FiatGame Identity NoGame NoSettings NoMoves where
   initialSettings = return initSettings
-  addPlayer (NoSettings ps) p
+  addPlayer p (NoSettings ps)
     | length ps < 2 = return $ Just (NoSettings (p:ps))
     | otherwise = return Nothing
   makeMove (FiatGameState A s _) _ = return $ FiatGameState B s []
@@ -49,11 +49,11 @@ initSettings = NoSettings []
 goodSettings :: Maybe NoSettings
 goodSettings = runIdentity $ do
   i <- initialSettings
-  runMaybeT $ foldM (\s p -> MaybeT $ addPlayer s p) i [FiatPlayer 0, FiatPlayer 1]
+  runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1]
 badSettings :: Maybe NoSettings
 badSettings = runIdentity $ do
     i <- initialSettings
-    runMaybeT $ foldM (\s p -> MaybeT $ addPlayer s p) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
+    runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
 
 initialState :: FiatGameStateMsg
 initialState = FiatGameStateMsg $ encode (FiatGameState A initSettings [] :: FiatGameState NoGame NoSettings NoMoves)
