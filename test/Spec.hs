@@ -40,7 +40,7 @@ instance FiatGame Identity NoGame NoSettings NoMoves where
   isPlayersTurn _ (FiatGameState A _) (FiatMove (FiatPlayer 0) _)  = return True
   isPlayersTurn _ (FiatGameState B _)  (FiatMove (FiatPlayer 1) _) = return True
   isPlayersTurn _ _ _                                                = return False
-  initialGameState s = return $ Right $ FiatGameState A []
+  initialGameState s = return $ Right (s,FiatGameState A [])
 
 type NoGameFiatGameState = Identity (Either FiatMoveError (FiatGameState NoGame NoMoves))
 

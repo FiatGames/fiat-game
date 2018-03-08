@@ -47,7 +47,7 @@ newtype FiatMoveMsg = FiatMoveMsg Text
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON s, FromJSON s) => FiatGame m g s mv | s -> mv, s -> g where
   initialSettings :: m s
   addPlayer :: FiatPlayer -> s -> m (Maybe s)
-  initialGameState :: s -> m (Either Text (FiatGameState g mv))
+  initialGameState :: s -> m (Either Text (s,FiatGameState g mv))
   makeMove :: s -> FiatGameState g mv -> FiatMove mv -> m (FiatGameState g mv)
   isPlayersTurn :: s -> FiatGameState g mv -> FiatMove mv -> m Bool
   isMoveValid :: s -> FiatGameState g mv -> FiatMove mv -> m Bool
