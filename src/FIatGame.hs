@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveFunctor          #-}
 {-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FunctionalDependencies #-}
+{-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE TemplateHaskell        #-}
@@ -22,11 +23,7 @@ data FiatPlayer = FiatPlayer Int64 | System
   deriving (Eq,Ord,Show,Generic)
 $(deriveJSON defaultOptions ''FiatPlayer)
 
-data FiatMove m = FiatMove FiatPlayer m
-  deriving (Eq,Ord,Show,Generic,Functor)
-$(deriveJSON defaultOptions ''FiatMove)
-
-data FutureMove m = FutureMove UTCTime (FiatMove m)
+data FutureMove m = FutureMove UTCTime m
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''FutureMove)
 
@@ -34,38 +31,65 @@ data FiatGameState g m = FiatGameState g [FutureMove m]
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''FiatGameState)
 
-data FiatMoveError = Invalid | Unauthorized | NotYourTurn | DecodeError Text
+data FiatFromClientError = GameIsNotStarted | GameAlreadyStarted | InvalidMove | Unauthorized | NotYourTurn | NotEnoughPlayers | DecodeError Text | FailedToInitialize Text
   deriving (Eq,Show,Generic)
-$(deriveJSON defaultOptions ''FiatMoveError)
+$(deriveJSON defaultOptions ''FiatFromClientError)
 
-newtype FiatGameStateMsg = FiatGameStateMsg Text
+data FiatFromClientCmd s mv = StartGame | UpdateSettings s | MakeMove mv
+  deriving (Eq,Show,Generic)
+$(deriveJSON defaultOptions ''FiatFromClientCmd)
+
+data FiatFromClient s mv = FiatFromClient
+  { fiatFromClientPlayer :: FiatPlayer
+  , fiatFromClientCmd    :: FiatFromClientCmd s mv
+  } deriving (Eq,Show,Generic)
+$(deriveJSON defaultOptions ''FiatFromClient)
+
+newtype FiatGameStateMsg = FiatGameStateMsg {getGameStateMsg :: Text}
   deriving (Eq,Show,Generic)
 
-newtype FiatMoveMsg = FiatMoveMsg Text
+newtype FiatFromClientMsg = FiatFromClientMsg {getFromClientMsg :: Text}
   deriving (Eq,Show,Generic)
 
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON s, FromJSON s) => FiatGame m g s mv | s -> mv, s -> g where
   initialSettings :: m s
   addPlayer :: FiatPlayer -> s -> m (Maybe s)
   initialGameState :: s -> m (Either Text (s,FiatGameState g mv))
-  makeMove :: s -> FiatGameState g mv -> FiatMove mv -> m (FiatGameState g mv)
-  isPlayersTurn :: s -> FiatGameState g mv -> FiatMove mv -> m Bool
-  isMoveValid :: s -> FiatGameState g mv -> FiatMove mv -> m Bool
-  isMoveAuthorized :: s -> FiatGameState g mv -> FiatPlayer -> FiatMove mv -> m Bool
-  isMoveAuthorized _ _ System _                                     = return True
-  isMoveAuthorized _ _ (FiatPlayer _) (FiatMove System _)           = return False
-  isMoveAuthorized _ _ (FiatPlayer p1) (FiatMove (FiatPlayer p2) _) = return $ p1 == p2
-  processFromWebSocket :: FiatPlayer -> s -> FiatGameStateMsg -> FiatMoveMsg -> m (Either FiatMoveError (FiatGameState g mv))
-  processFromWebSocket p s (FiatGameStateMsg egs) (FiatMoveMsg emv) = runExceptT $ do
-    gs <- ExceptT $ return $ over _Left (DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 egs
-    mv <- ExceptT $ return $ over _Left (DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 emv
-    ExceptT $ boolToEither Unauthorized <$> isMoveAuthorized s gs p mv
-    let isSystem = case mv of
-                    (FiatMove System _) -> True
-                    _                   -> False
-    ExceptT $ boolToEither NotYourTurn . (isSystem ||) <$> isPlayersTurn s gs mv
-    ExceptT $ boolToEither Invalid <$> isMoveValid s gs mv
-    lift $ makeMove s gs mv
+  makeMove :: s -> FiatGameState g mv -> (FiatPlayer, mv) -> m (FiatGameState g mv)
+  isPlayersTurn :: s -> FiatGameState g mv -> (FiatPlayer, mv) -> m Bool
+  isMoveValid :: s -> FiatGameState g mv -> (FiatPlayer, mv) -> m Bool
+  isCmdAuthorized :: s -> Maybe (FiatGameState g mv) -> FiatPlayer -> FiatFromClient s mv -> m Bool
+  isCmdAuthorized _ _ System _ = return True
+  isCmdAuthorized _ _ (FiatPlayer p1) fc = case fiatFromClientPlayer fc of
+    System          -> return False
+    (FiatPlayer p2) -> return $ p1 == p2
+  processFromWebSocket :: FiatPlayer -> s -> Maybe FiatGameStateMsg -> FiatFromClientMsg -> m (Either FiatFromClientError (s,Maybe (FiatGameState g mv)))
+  processFromWebSocket p s megs (FiatFromClientMsg ecmsg) = runExceptT $ do
+    cmsg <- ExceptT $ return $ over _Left (DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
+    mgs <- case megs of
+      Nothing -> ExceptT $ return $ Right Nothing
+      (Just (FiatGameStateMsg egs)) -> ExceptT $ return $ over _Left (DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 egs
+    ExceptT $ boolToEither Unauthorized <$> isCmdAuthorized s mgs p cmsg
+    let p' = fiatFromClientPlayer cmsg
+    case fiatFromClientCmd cmsg of
+      StartGame                -> case mgs of
+        (Just _) -> ExceptT $ return $ Left GameAlreadyStarted
+        Nothing  -> do
+          egs <- lift $ initialGameState s
+          ExceptT $ return
+                  $ over _Left FailedToInitialize
+                  $ over (_Right._2) Just egs
+      UpdateSettings s'         -> ExceptT $ return $ Right (s',Nothing)
+      MakeMove mv -> case megs of
+        Nothing -> ExceptT $ return $ Left GameIsNotStarted
+        Just (FiatGameStateMsg egs) -> do
+          gs <- ExceptT $ return $ over _Left (DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 egs
+          let isSystem = case p' of
+                          System -> True
+                          _      -> False
+          ExceptT $ boolToEither NotYourTurn . (isSystem ||) <$> isPlayersTurn s gs (p',mv)
+          ExceptT $ boolToEither InvalidMove <$> isMoveValid s gs (p',mv)
+          lift $ (,) s . Just <$> makeMove s gs (p',mv)
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
