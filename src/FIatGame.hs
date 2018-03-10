@@ -39,6 +39,18 @@ data FiatFromClientCmd s mv = StartGame | UpdateSettings s | MakeMove mv
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''FiatFromClientCmd)
 
+data FiatToClient s g mv
+  = FromClientError FiatFromClientError
+  | FiatToClient
+    { fiatToClientSettings :: s
+    , fiatToClientState    :: Maybe (FiatGameState g mv)
+    }
+  deriving (Eq,Show,Generic)
+$(deriveJSON defaultOptions ''FiatToClient)
+
+fromEither (Left err)      = FromClientError err
+fromEither (Right (s,mgs)) = FiatToClient s mgs
+
 data FiatFromClient s mv = FiatFromClient
   { fiatFromClientPlayer :: FiatPlayer
   , fiatFromClientCmd    :: FiatFromClientCmd s mv
@@ -66,8 +78,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON s, FromJSON
   isCmdAuthorized _ _ (FiatPlayer p1) fc = case fiatFromClientPlayer fc of
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
-  processFromWebSocket :: FiatPlayer -> FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> FiatFromClientMsg -> m (Either FiatFromClientError (s,Maybe (FiatGameState g mv)))
-  processFromWebSocket p (FiatGameSettingsMsg es) megs (FiatFromClientMsg ecmsg) = runExceptT $ do
+  processFromWebSocket :: FiatPlayer -> FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> FiatFromClientMsg -> m (FiatToClient s g mv)
+  processFromWebSocket p (FiatGameSettingsMsg es) megs (FiatFromClientMsg ecmsg) = fmap fromEither $ runExceptT $ do
     s <- ExceptT $ return $ over _Left (DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 es
     cmsg <- ExceptT $ return $ over _Left (DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
     mgs <- case megs of
