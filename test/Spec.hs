@@ -49,10 +49,14 @@ type NoGameFiatGameState = Identity (Either FiatFromClientError (NoSettings,Mayb
 
 initSettings :: NoSettings
 initSettings = NoSettings [] False
+initSettingsMsg :: FiatGameSettingsMsg
+initSettingsMsg = FiatGameSettingsMsg $ decodeUtf8 $ toStrict $ encode initSettings
 changedSettings :: NoSettings
 changedSettings = NoSettings [] True
 twoPlayersSettings :: NoSettings
 twoPlayersSettings = NoSettings [FiatPlayer 0, FiatPlayer 1] False
+twoPlayerSettingsMsg :: FiatGameSettingsMsg
+twoPlayerSettingsMsg = FiatGameSettingsMsg $ decodeUtf8 $ toStrict $ encode twoPlayersSettings
 
 goodSettings :: Maybe NoSettings
 goodSettings = runIdentity $ do
@@ -81,29 +85,29 @@ main :: IO ()
 main = hspec $ do
   describe "processFromWebSocket" $ do
     it "good"
-      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettings (Just initialState) goodMove :: NoGameFiatGameState) `shouldBe` Right (initSettings,Just $ FiatGameState B [])
+      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettingsMsg (Just initialState) goodMove :: NoGameFiatGameState) `shouldBe` Right (initSettings,Just $ FiatGameState B [])
     it "start game"
-      $ runIdentity (processFromWebSocket System twoPlayersSettings Nothing startGame :: NoGameFiatGameState) `shouldBe` Right (twoPlayersSettings,Just $ FiatGameState A [])
+      $ runIdentity (processFromWebSocket System twoPlayerSettingsMsg Nothing startGame :: NoGameFiatGameState) `shouldBe` Right (twoPlayersSettings,Just $ FiatGameState A [])
     it "update settings"
-      $ runIdentity (processFromWebSocket System initSettings Nothing updateSettings :: NoGameFiatGameState) `shouldBe` Right (changedSettings,Nothing)
+      $ runIdentity (processFromWebSocket System initSettingsMsg Nothing updateSettings :: NoGameFiatGameState) `shouldBe` Right (changedSettings,Nothing)
     it "failed to start game"
-      $ runIdentity (processFromWebSocket System initSettings Nothing startGame :: NoGameFiatGameState) `shouldBe` Left (FailedToInitialize "Not enough players")
+      $ runIdentity (processFromWebSocket System initSettingsMsg Nothing startGame :: NoGameFiatGameState) `shouldBe` Left (FailedToInitialize "Not enough players")
     it "system allowed"
-      $ runIdentity (processFromWebSocket System initSettings (Just initialState) systemMove :: NoGameFiatGameState) `shouldBe` Right (initSettings,Just $ FiatGameState B [])
+      $ runIdentity (processFromWebSocket System initSettingsMsg (Just initialState) systemMove :: NoGameFiatGameState) `shouldBe` Right (initSettings,Just $ FiatGameState B [])
     it "system allowed to move on other's behalf"
-      $ runIdentity (processFromWebSocket System initSettings (Just initialState) goodMove :: NoGameFiatGameState) `shouldBe` Right (initSettings,Just $ FiatGameState B [])
+      $ runIdentity (processFromWebSocket System initSettingsMsg (Just initialState) goodMove :: NoGameFiatGameState) `shouldBe` Right (initSettings,Just $ FiatGameState B [])
     it "unauthorized"
-      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettings (Just initialState) unauthorizedMove :: NoGameFiatGameState) `shouldBe` Left Unauthorized
+      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettingsMsg (Just initialState) unauthorizedMove :: NoGameFiatGameState) `shouldBe` Left Unauthorized
     it "not your turn"
-      $ runIdentity (processFromWebSocket (FiatPlayer 1) initSettings (Just initialState) unauthorizedMove :: NoGameFiatGameState) `shouldBe` Left NotYourTurn
+      $ runIdentity (processFromWebSocket (FiatPlayer 1) initSettingsMsg (Just initialState) unauthorizedMove :: NoGameFiatGameState) `shouldBe` Left NotYourTurn
     it "invalid"
-      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettings (Just initialState) invalidMove :: NoGameFiatGameState) `shouldBe` Left InvalidMove
+      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettingsMsg (Just initialState) invalidMove :: NoGameFiatGameState) `shouldBe` Left InvalidMove
     it "game is not started"
-      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettings Nothing invalidMove :: NoGameFiatGameState) `shouldBe` Left GameIsNotStarted
+      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettingsMsg Nothing invalidMove :: NoGameFiatGameState) `shouldBe` Left GameIsNotStarted
     it "game already started"
-      $ runIdentity (processFromWebSocket System initSettings (Just initialState) startGame :: NoGameFiatGameState) `shouldBe` Left GameAlreadyStarted
+      $ runIdentity (processFromWebSocket System initSettingsMsg (Just initialState) startGame :: NoGameFiatGameState) `shouldBe` Left GameAlreadyStarted
     it "decode error"
-      $ runIdentity (processFromWebSocket (FiatPlayer 1) initSettings (Just $ FiatGameStateMsg "") (FiatFromClientMsg "") :: NoGameFiatGameState) `shouldBe` Left (DecodeError "Error in $: not enough input")
+      $ runIdentity (processFromWebSocket (FiatPlayer 1) initSettingsMsg (Just $ FiatGameStateMsg "") (FiatFromClientMsg "") :: NoGameFiatGameState) `shouldBe` Left (DecodeError "Error in $: not enough input")
   describe "addPlayer" $ do
     it "good"
       $ goodSettings `shouldBe` Just (NoSettings [FiatPlayer 1, FiatPlayer 0] False)
