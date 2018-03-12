@@ -4,6 +4,7 @@
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE ScopedTypeVariables    #-}
 {-# LANGUAGE TemplateHaskell        #-}
 
 module FiatGame.Class where
@@ -43,6 +44,15 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON s, FromJSON
   isCmdAuthorized _ _ (FiatPlayer p1) fc = case ToServer.player fc of
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
+  toWebSocket :: FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> m (ToClient.Msg s g mv)
+  toWebSocket (FiatGameSettingsMsg es) megs =
+    let m = do
+          s :: s <- eitherDecodeStrict $ encodeUtf8 es
+          gs <- case megs of
+              Nothing    -> Right Nothing
+              (Just (FiatGameStateMsg egs)) -> eitherDecodeStrict $ encodeUtf8 egs
+          return (s,gs)
+      in return $ either (ToClient.Error . ToClient.DecodeError . pack) (uncurry ToClient.Msg) m
   processFromWebSocket :: FiatPlayer -> FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> FiatFromClientMsg -> m (ToClient.Msg s g mv)
   processFromWebSocket p (FiatGameSettingsMsg es) megs (FiatFromClientMsg ecmsg) = fmap ToClient.fromEither $ runExceptT $ do
     s <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 es
