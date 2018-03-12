@@ -44,8 +44,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON s, FromJSON
   isCmdAuthorized _ _ (FiatPlayer p1) fc = case ToServer.player fc of
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
-  toClient :: FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> m (ToClient.Msg s g mv)
-  toClient (FiatGameSettingsMsg es) megs =
+  toClientMsg :: FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> m (ToClient.Msg s g mv)
+  toClientMsg (FiatGameSettingsMsg es) megs =
     let m = do
           s :: s <- eitherDecodeStrict $ encodeUtf8 es
           gs <- case megs of
