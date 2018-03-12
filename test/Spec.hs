@@ -12,10 +12,10 @@ import           Data.Aeson.TH
 import           Data.ByteString.Lazy      (ByteString, toStrict)
 import           Data.Text                 (Text)
 import           Data.Text.Encoding
+import           FiatGame.Class
 import           FiatGame.GameState
 import qualified FiatGame.ToClient.Types   as ToClient
 import qualified FiatGame.ToServer.Types   as ToServer
-import           FiatGame.Types
 import           Test.Hspec
 
 data NoGame = A | B
@@ -36,8 +36,8 @@ instance FiatGame Identity NoGame NoSettings NoMoves where
   addPlayer p (NoSettings ps c)
     | length ps < 2 = return $ Just (NoSettings (p:ps) c)
     | otherwise = return Nothing
-  makeMove s (GameState A _) _ = return $ GameState B []
-  makeMove s (GameState B _) _ = return $ GameState A []
+  makeMove s (GameState A _) _ = return $ GameState B Nothing
+  makeMove s (GameState B _) _ = return $ GameState A Nothing
   isMoveValid _ (GameState A _) (_, ToB) = return True
   isMoveValid _ (GameState B _) (_, ToA) = return True
   isMoveValid _ _ _                      = return False
@@ -46,7 +46,7 @@ instance FiatGame Identity NoGame NoSettings NoMoves where
   isPlayersTurn _ _ _                                = return False
   initialGameState s
     | length (players s) < 2 = return $ Left "Not enough players"
-    | otherwise = return $ Right (s,GameState A [])
+    | otherwise = return $ Right (s,GameState A Nothing)
 
 type NoGameFiatGameState = Identity (ToClient.Msg NoSettings NoGame NoMoves)
 type NoGameToServerMsg = ToServer.Msg NoSettings NoMoves
@@ -72,7 +72,7 @@ badSettings = runIdentity $ do
     runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
 
 initialState :: FiatGameStateMsg
-initialState = FiatGameStateMsg $ decodeUtf8 $ toStrict $ encode (GameState A [] :: GameState NoGame NoMoves)
+initialState = FiatGameStateMsg $ decodeUtf8 $ toStrict $ encode (GameState A Nothing :: GameState NoGame NoMoves)
 systemMove :: FiatFromClientMsg
 systemMove = FiatFromClientMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.MakeMove ToB) :: NoGameToServerMsg)
 goodMove :: FiatFromClientMsg
@@ -89,17 +89,17 @@ main :: IO ()
 main = hspec $ do
   describe "processFromWebSocket" $ do
     it "good"
-      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettingsMsg (Just initialState) goodMove :: NoGameFiatGameState) `shouldBe` ToClient.Msg initSettings (Just $ GameState B [])
+      $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettingsMsg (Just initialState) goodMove :: NoGameFiatGameState) `shouldBe` ToClient.Msg initSettings (Just $ GameState B Nothing)
     it "start game"
-      $ runIdentity (processFromWebSocket System twoPlayerSettingsMsg Nothing startGame :: NoGameFiatGameState) `shouldBe` ToClient.Msg twoPlayersSettings (Just $ GameState A [])
+      $ runIdentity (processFromWebSocket System twoPlayerSettingsMsg Nothing startGame :: NoGameFiatGameState) `shouldBe` ToClient.Msg twoPlayersSettings (Just $ GameState A Nothing)
     it "update settings"
       $ runIdentity (processFromWebSocket System initSettingsMsg Nothing updateSettings :: NoGameFiatGameState) `shouldBe` ToClient.Msg changedSettings Nothing
     it "failed to start game"
       $ runIdentity (processFromWebSocket System initSettingsMsg Nothing startGame :: NoGameFiatGameState) `shouldBe` ToClient.Error (ToClient.FailedToInitialize "Not enough players")
     it "system allowed"
-      $ runIdentity (processFromWebSocket System initSettingsMsg (Just initialState) systemMove :: NoGameFiatGameState) `shouldBe` ToClient.Msg initSettings (Just $ GameState B [])
+      $ runIdentity (processFromWebSocket System initSettingsMsg (Just initialState) systemMove :: NoGameFiatGameState) `shouldBe` ToClient.Msg initSettings (Just $ GameState B Nothing)
     it "system allowed to move on other's behalf"
-      $ runIdentity (processFromWebSocket System initSettingsMsg (Just initialState) goodMove :: NoGameFiatGameState) `shouldBe` ToClient.Msg initSettings (Just$ GameState B [])
+      $ runIdentity (processFromWebSocket System initSettingsMsg (Just initialState) goodMove :: NoGameFiatGameState) `shouldBe` ToClient.Msg initSettings (Just$ GameState B Nothing)
     it "unauthorized"
       $ runIdentity (processFromWebSocket (FiatPlayer 0) initSettingsMsg (Just initialState) unauthorizedMove :: NoGameFiatGameState) `shouldBe` ToClient.Error ToClient.Unauthorized
     it "not your turn"

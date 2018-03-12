@@ -22,6 +22,6 @@ data FutureMove m = FutureMove UTCTime m
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''FutureMove)
 
-data GameState g m = GameState g [FutureMove m]
+data GameState g m = GameState g (Maybe (FutureMove m))
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''GameState)

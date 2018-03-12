@@ -6,7 +6,7 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE TemplateHaskell        #-}
 
-module FiatGame.Types where
+module FiatGame.Class where
 
 import           Control.Lens
 import           Control.Monad.Except
