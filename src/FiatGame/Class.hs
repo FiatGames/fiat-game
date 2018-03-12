@@ -29,7 +29,7 @@ newtype FiatGameSettingsMsg = FiatGameSettingsMsg {getGameSettingsMsg :: Text}
 newtype FiatGameStateMsg = FiatGameStateMsg {getGameStateMsg :: Text}
   deriving (Eq,Show,Generic)
 
-newtype FiatFromClientMsg = FiatFromClientMsg {getFromClientMsg :: Text}
+newtype FiatToServertMsg = FiatToServertMsg {getToServerMsg :: Text}
   deriving (Eq,Show,Generic)
 
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON s, FromJSON s) => FiatGame m g s mv | s -> mv, s -> g where
@@ -44,8 +44,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON s, FromJSON
   isCmdAuthorized _ _ (FiatPlayer p1) fc = case ToServer.player fc of
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
-  toWebSocket :: FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> m (ToClient.Msg s g mv)
-  toWebSocket (FiatGameSettingsMsg es) megs =
+  toClient :: FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> m (ToClient.Msg s g mv)
+  toClient (FiatGameSettingsMsg es) megs =
     let m = do
           s :: s <- eitherDecodeStrict $ encodeUtf8 es
           gs <- case megs of
@@ -53,8 +53,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON s, FromJSON
               (Just (FiatGameStateMsg egs)) -> eitherDecodeStrict $ encodeUtf8 egs
           return (s,gs)
       in return $ either (ToClient.Error . ToClient.DecodeError . pack) (uncurry ToClient.Msg) m
-  processFromWebSocket :: FiatPlayer -> FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> FiatFromClientMsg -> m (ToClient.Msg s g mv)
-  processFromWebSocket p (FiatGameSettingsMsg es) megs (FiatFromClientMsg ecmsg) = fmap ToClient.fromEither $ runExceptT $ do
+  processToServer :: FiatPlayer -> FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> FiatToServertMsg -> m (ToClient.Msg s g mv)
+  processToServer p (FiatGameSettingsMsg es) megs (FiatToServertMsg ecmsg) = fmap ToClient.fromEither $ runExceptT $ do
     s <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 es
     cmsg <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
     mgs <- case megs of
