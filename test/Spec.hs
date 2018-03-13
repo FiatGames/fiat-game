@@ -31,8 +31,8 @@ data NoMoves = ToA | ToB
   deriving (Eq, Show)
 $(deriveJSON defaultOptions ''NoMoves)
 
-instance FiatGame Identity NoGame NoSettings NoMoves where
-  initialSettings = return initSettings
+instance FiatGame Identity NoGame NoSettings NoMoves NoGame where
+  defaultSettings = return initSettings
   addPlayer p (NoSettings ps c)
     | length ps < 2 = return $ Just (NoSettings (p:ps) c)
     | otherwise = return Nothing
@@ -47,6 +47,7 @@ instance FiatGame Identity NoGame NoSettings NoMoves where
   initialGameState s
     | length (players s) < 2 = return $ Left "Not enough players"
     | otherwise = return $ Right (s,GameState Playing A Nothing)
+  toClientGameState _ _ = return
 
 type NoGameFiatGameState = Identity (ToClient.Msg NoSettings NoGame NoMoves)
 type NoGameToServerMsg = ToServer.Msg NoSettings NoMoves
@@ -64,11 +65,11 @@ twoPlayerSettingsMsg = FiatGameSettingsMsg $ decodeUtf8 $ toStrict $ encode twoP
 
 goodSettings :: Maybe NoSettings
 goodSettings = runIdentity $ do
-  i <- initialSettings
+  i <- defaultSettings
   runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1]
 badSettings :: Maybe NoSettings
 badSettings = runIdentity $ do
-    i <- initialSettings
+    i <- defaultSettings
     runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
 
 initialState :: FiatGameStateMsg

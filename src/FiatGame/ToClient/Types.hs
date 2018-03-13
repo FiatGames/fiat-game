@@ -27,5 +27,6 @@ data Msg s g mv
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''Msg)
 
+fromEither :: Either Error (s, Maybe (GameState g mv)) -> Msg s g mv
 fromEither (Left err)      = Error err
 fromEither (Right (s,mgs)) = Msg s mgs
