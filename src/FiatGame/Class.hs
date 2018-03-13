@@ -67,9 +67,9 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
         (Just _) -> ExceptT $ return $ Left ToClient.GameAlreadyStarted
         Nothing  -> lift (initialGameState s) >>= \case
           Left err -> ExceptT $ return $ Left $ ToClient.FailedToInitialize err
-          Right (_,gs :: GameState g mv) -> do
-            cgs <- lift $ toClientGameState p s gs
-            ExceptT $ return $ Right (s,Just cgs)
+          Right (s',gs :: GameState g mv) -> do
+            cgs <- lift $ toClientGameState p s' gs
+            ExceptT $ return $ Right (s',Just cgs)
       ToServer.UpdateSettings s'         -> ExceptT $ return $ Right (s',Nothing)
       ToServer.MakeMove mv -> case megs of
         Nothing -> ExceptT $ return $ Left ToClient.GameIsNotStarted

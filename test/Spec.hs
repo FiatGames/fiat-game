@@ -44,9 +44,9 @@ instance FiatGame Identity NoGame NoSettings NoMoves NoGame where
   isPlayersTurn _ (GameState _ A _) (FiatPlayer 0, _)  = return True
   isPlayersTurn _ (GameState _ B _)  (FiatPlayer 1, _) = return True
   isPlayersTurn _ _ _                                  = return False
-  initialGameState s
-    | length (players s) < 2 = return $ Left "Not enough players"
-    | otherwise = return $ Right (s,GameState Playing A Nothing)
+  initialGameState (NoSettings ps c)
+    | length ps < 2 = return $ Left "Not enough players"
+    | otherwise = return $ Right (NoSettings ps (not c),GameState Playing A Nothing)
   toClientGameState _ _ = return
 
 type NoGameFiatGameState = Identity (ToClient.Msg NoSettings NoGame NoMoves)
@@ -62,6 +62,9 @@ twoPlayersSettings :: NoSettings
 twoPlayersSettings = NoSettings [FiatPlayer 0, FiatPlayer 1] False
 twoPlayerSettingsMsg :: FiatGameSettingsMsg
 twoPlayerSettingsMsg = FiatGameSettingsMsg $ decodeUtf8 $ toStrict $ encode twoPlayersSettings
+twoPlayersSettingsAfter :: NoSettings
+twoPlayersSettingsAfter = NoSettings [FiatPlayer 0, FiatPlayer 1] True
+
 
 goodSettings :: Maybe NoSettings
 goodSettings = runIdentity $ do
@@ -86,13 +89,14 @@ startGame :: FiatToServertMsg
 startGame =  FiatToServertMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System ToServer.StartGame :: NoGameToServerMsg)
 updateSettings :: FiatToServertMsg
 updateSettings =  FiatToServertMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.UpdateSettings changedSettings) :: NoGameToServerMsg)
+
 main :: IO ()
 main = hspec $ do
   describe "processToServer" $ do
     it "good"
       $ runIdentity (processToServer (FiatPlayer 0) initSettingsMsg (Just initialState) goodMove :: NoGameFiatGameState) `shouldBe` ToClient.Msg initSettings (Just $ GameState Playing B Nothing)
     it "start game"
-      $ runIdentity (processToServer System twoPlayerSettingsMsg Nothing startGame :: NoGameFiatGameState) `shouldBe` ToClient.Msg twoPlayersSettings (Just $ GameState Playing A Nothing)
+      $ runIdentity (processToServer System twoPlayerSettingsMsg Nothing startGame :: NoGameFiatGameState) `shouldBe` ToClient.Msg twoPlayersSettingsAfter (Just $ GameState Playing A Nothing)
     it "update settings"
       $ runIdentity (processToServer System initSettingsMsg Nothing updateSettings :: NoGameFiatGameState) `shouldBe` ToClient.Msg changedSettings Nothing
     it "failed to start game"
