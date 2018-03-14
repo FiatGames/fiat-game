@@ -40,20 +40,25 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   isPlayersTurn :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   isMoveValid :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   toClientSettingsAndState :: FiatPlayer -> SettingsAndState s g mv -> m (SettingsAndState cs cg mv)
+
   isCmdAuthorized :: FiatMoveSubmittedBy -> SettingsAndState s g mv -> ToServer.Msg s mv -> m Bool
   isCmdAuthorized (FiatMoveSubmittedBy System) _  _ = return True
   isCmdAuthorized (FiatMoveSubmittedBy (FiatPlayer p1)) _ fc = case ToServer.player fc of
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
+
   toSettingsAndState :: FromFiat -> m (Either ToClient.Error (SettingsAndState s g mv))
   toSettingsAndState (FiatGameSettingsMsg es,megs) = return $ over _Left ToClient.DecodeError $ SettingsAndState <$> es' <*> megs'
     where
       es' = over _Left pack <$> eitherDecodeStrict $ encodeUtf8 es
       megs' = fromMaybe (Right Nothing) $ over _Left pack <$> (eitherDecodeStrict . encodeUtf8 . getGameStateMsg <$> megs)
-  toClientMsg :: FiatPlayer -> Either (ToServer.MsgProcessed s g mv) (SettingsAndState s g mv) ->  m (ToClient.Msg cs cg mv)
+
+  toClientMsg :: FiatPlayer -> Either (ToServer.MsgProcessed s g mv) (Either ToClient.Error (SettingsAndState s g mv)) ->  m (ToClient.Msg cs cg mv)
   toClientMsg _ (Left (ToServer.Error err))   = return $ ToClient.Error err
   toClientMsg p (Left (ToServer.MsgProcessed s))   = ToClient.Msg <$> toClientSettingsAndState p s
-  toClientMsg p (Right s) = ToClient.Msg <$> toClientSettingsAndState p s
+  toClientMsg _ (Right (Left err)) = return $ ToClient.Error err
+  toClientMsg p (Right (Right s)) = ToClient.Msg <$> toClientSettingsAndState p s
+
   processToServer :: FiatMoveSubmittedBy -> FromFiat -> FiatToServertMsg -> m (ToServer.MsgProcessed s g mv)
   processToServer submittedBy fromFiat (FiatToServertMsg ecmsg) = fmap ToServer.fromEither $ runExceptT $ do
     (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat

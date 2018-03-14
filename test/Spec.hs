@@ -153,6 +153,6 @@ main = hspec $ do
     it "good - ToServer.MsgProcessed"
       $ runIdentity goodToClientMsg `shouldBe` ToClient.Msg (SettingsAndState initClientSettings (Just $ GameState Playing (ClientNoGame False) Nothing))
     it "good - SettingsAndState s Nothing"
-      $ runIdentity (toClientMsg (FiatPlayer 1) (Right (SettingsAndState initSettings Nothing))) `shouldBe` ToClient.Msg (SettingsAndState initClientSettings Nothing)
+      $ runIdentity (toClientMsg (FiatPlayer 1) (Right (Right (SettingsAndState initSettings Nothing)))) `shouldBe` ToClient.Msg (SettingsAndState initClientSettings Nothing)
     it "good - SettingsAndState s (Just gs)"
-      $ runIdentity (toClientMsg (FiatPlayer 1) (Right (SettingsAndState  initSettings (Just initialState)))) `shouldBe` ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState))
+      $ runIdentity (toClientMsg (FiatPlayer 1) (Right (Right (SettingsAndState initSettings (Just initialState))))) `shouldBe` ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState))
