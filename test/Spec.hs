@@ -113,7 +113,7 @@ updateSettings :: FiatToServertMsg
 updateSettings =  FiatToServertMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.UpdateSettings changedSettings) :: NoGameToServerMsg)
 
 goodProcessToServer :: NoGameFiatGameState
-goodProcessToServer = processToServer (FiatMoveSubmittedBy (FiatPlayer 0)) initSettingsMsg (Just initialStateMsg) goodMove
+goodProcessToServer = processToServer (FiatMoveSubmittedBy (FiatPlayer 0)) (initSettingsMsg, Just initialStateMsg) goodMove
 goodToClientMsg :: NoGameClientMsg
 goodToClientMsg = goodProcessToServer >>= toClientMsg (FiatPlayer 0) . Left
 
@@ -123,27 +123,27 @@ main = hspec $ do
     it "good"
       $ runIdentity goodProcessToServer `shouldBe` ToServer.MsgProcessed (SettingsAndState initSettings (Just $ GameState Playing (NoGame False ()) Nothing))
     it "start game"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy System) twoPlayerSettingsMsg Nothing startGame :: NoGameFiatGameState) `shouldBe` ToServer.MsgProcessed (SettingsAndState twoPlayersSettingsAfter (Just $ GameState Playing (NoGame True ()) Nothing))
+      $ runIdentity (processToServer (FiatMoveSubmittedBy System) (twoPlayerSettingsMsg, Nothing) startGame :: NoGameFiatGameState) `shouldBe` ToServer.MsgProcessed (SettingsAndState twoPlayersSettingsAfter (Just $ GameState Playing (NoGame True ()) Nothing))
     it "update settings"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy System) initSettingsMsg Nothing updateSettings :: NoGameFiatGameState) `shouldBe` ToServer.MsgProcessed (SettingsAndState changedSettings Nothing)
+      $ runIdentity (processToServer (FiatMoveSubmittedBy System) (initSettingsMsg, Nothing) updateSettings :: NoGameFiatGameState) `shouldBe` ToServer.MsgProcessed (SettingsAndState changedSettings Nothing)
     it "failed to start game"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy System) initSettingsMsg Nothing startGame :: NoGameFiatGameState) `shouldBe` ToServer.Error (ToClient.FailedToInitialize "Not enough players")
+      $ runIdentity (processToServer (FiatMoveSubmittedBy System) (initSettingsMsg, Nothing) startGame :: NoGameFiatGameState) `shouldBe` ToServer.Error (ToClient.FailedToInitialize "Not enough players")
     it "system allowed"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy System) initSettingsMsg (Just initialStateMsg) systemMove :: NoGameFiatGameState) `shouldBe` ToServer.MsgProcessed (SettingsAndState initSettings (Just $ GameState Playing (NoGame False ()) Nothing))
+      $ runIdentity (processToServer (FiatMoveSubmittedBy System) (initSettingsMsg, Just initialStateMsg) systemMove :: NoGameFiatGameState) `shouldBe` ToServer.MsgProcessed (SettingsAndState initSettings (Just $ GameState Playing (NoGame False ()) Nothing))
     it "system allowed to move on other's behalf"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy System) initSettingsMsg (Just initialStateMsg) goodMove :: NoGameFiatGameState) `shouldBe` ToServer.MsgProcessed (SettingsAndState initSettings (Just $ GameState Playing (NoGame False ()) Nothing))
+      $ runIdentity (processToServer (FiatMoveSubmittedBy System) (initSettingsMsg, Just initialStateMsg) goodMove :: NoGameFiatGameState) `shouldBe` ToServer.MsgProcessed (SettingsAndState initSettings (Just $ GameState Playing (NoGame False ()) Nothing))
     it "unauthorized"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 0)) initSettingsMsg (Just initialStateMsg) unauthorizedMove :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.Unauthorized
+      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 0)) (initSettingsMsg, Just initialStateMsg) unauthorizedMove :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.Unauthorized
     it "not your turn"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 1)) initSettingsMsg (Just initialStateMsg) unauthorizedMove :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.NotYourTurn
+      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 1)) (initSettingsMsg, Just initialStateMsg) unauthorizedMove :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.NotYourTurn
     it "invalid"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 0)) initSettingsMsg (Just initialStateMsg) invalidMove :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.InvalidMove
+      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 0)) (initSettingsMsg, Just initialStateMsg) invalidMove :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.InvalidMove
     it "game is not started"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 0)) initSettingsMsg Nothing invalidMove :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.GameIsNotStarted
+      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 0)) (initSettingsMsg, Nothing) invalidMove :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.GameIsNotStarted
     it "game already started"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy System) initSettingsMsg (Just initialStateMsg) startGame :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.GameAlreadyStarted
+      $ runIdentity (processToServer (FiatMoveSubmittedBy System) (initSettingsMsg, Just initialStateMsg) startGame :: NoGameFiatGameState) `shouldBe` ToServer.Error ToClient.GameAlreadyStarted
     it "decode error"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 1)) initSettingsMsg (Just $ FiatGameStateMsg "") (FiatToServertMsg "") :: NoGameFiatGameState) `shouldBe` ToServer.Error (ToClient.DecodeError "Error in $: not enough input")
+      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 1)) (initSettingsMsg, Just $ FiatGameStateMsg "") (FiatToServertMsg "") :: NoGameFiatGameState) `shouldBe` ToServer.Error (ToClient.DecodeError "Error in $: not enough input")
   describe "addPlayer" $ do
     it "good"
       $ goodSettings `shouldBe` Just (NoSettings [FiatPlayer 1, FiatPlayer 0] False ())

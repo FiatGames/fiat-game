@@ -10,6 +10,7 @@ module FiatGame.Class where
 import           Control.Lens
 import           Control.Monad.Except
 import           Data.Aeson
+import           Data.Maybe
 import           Data.Text               (Text, pack)
 import           Data.Text.Encoding
 import           FiatGame.GameState
@@ -29,6 +30,8 @@ newtype FiatToServertMsg = FiatToServertMsg {getToServerMsg :: Text}
 newtype FiatMoveSubmittedBy = FiatMoveSubmittedBy {getSubmittedBy :: FiatPlayer }
   deriving (Eq,Show,Generic)
 
+type FromFiat = (FiatGameSettingsMsg, Maybe FiatGameStateMsg)
+
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSON cg, ToJSON s, FromJSON s, ToJSON cs, FromJSON cs) => FiatGame m g s mv cg cs | s -> mv, s -> g, s -> cg, s -> cs where
   defaultSettings :: m s
   addPlayer :: FiatPlayer -> s -> m (Maybe s)
@@ -42,17 +45,19 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   isCmdAuthorized (FiatMoveSubmittedBy (FiatPlayer p1)) _ fc = case ToServer.player fc of
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
+  toSettingsAndState :: FromFiat -> m (Either ToClient.Error (SettingsAndState s g mv))
+  toSettingsAndState (FiatGameSettingsMsg es,megs) = return $ over _Left ToClient.DecodeError $ SettingsAndState <$> es' <*> megs'
+    where
+      es' = over _Left pack <$> eitherDecodeStrict $ encodeUtf8 es
+      megs' = fromMaybe (Right Nothing) $ over _Left pack <$> (eitherDecodeStrict . encodeUtf8 . getGameStateMsg <$> megs)
   toClientMsg :: FiatPlayer -> Either (ToServer.MsgProcessed s g mv) (SettingsAndState s g mv) ->  m (ToClient.Msg cs cg mv)
   toClientMsg _ (Left (ToServer.Error err))   = return $ ToClient.Error err
   toClientMsg p (Left (ToServer.MsgProcessed s))   = ToClient.Msg <$> toClientSettingsAndState p s
   toClientMsg p (Right s) = ToClient.Msg <$> toClientSettingsAndState p s
-  processToServer :: FiatMoveSubmittedBy -> FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> FiatToServertMsg -> m (ToServer.MsgProcessed s g mv)
-  processToServer submittedBy (FiatGameSettingsMsg es) megs (FiatToServertMsg ecmsg) = fmap ToServer.fromEither $ runExceptT $ do
-    s <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 es
+  processToServer :: FiatMoveSubmittedBy -> FromFiat -> FiatToServertMsg -> m (ToServer.MsgProcessed s g mv)
+  processToServer submittedBy fromFiat (FiatToServertMsg ecmsg) = fmap ToServer.fromEither $ runExceptT $ do
+    (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat
     cmsg <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
-    mgs <- case megs of
-      Nothing -> ExceptT $ return $ Right Nothing
-      (Just (FiatGameStateMsg egs)) -> ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 egs
     ExceptT $ boolToEither ToClient.Unauthorized <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg
     let p = ToServer.player cmsg
     case ToServer.cmd cmsg of
@@ -62,10 +67,9 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
           Left err -> ExceptT $ return $ Left $ ToClient.FailedToInitialize err
           Right (s', gs :: GameState g mv) -> ExceptT $ return $ Right (s',Just gs)
       ToServer.UpdateSettings s'         -> ExceptT $ return $ Right (s',Nothing)
-      ToServer.MakeMove mv -> case megs of
+      ToServer.MakeMove mv -> case mgs of
         Nothing -> ExceptT $ return $ Left ToClient.GameIsNotStarted
-        Just (FiatGameStateMsg egs) -> do
-          (gs :: GameState g mv) <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 egs
+        Just gs -> do
           let isSystem = case p of
                           System -> True
                           _      -> False
@@ -77,3 +81,4 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
 boolToEither a False = Left a
+
