@@ -14,9 +14,9 @@ import           Data.Time.Clock
 import           GHC.Generics
 import           GHC.Int
 
-data FiatPlayer = FiatPlayer Int64 | System
+data Player = Player Int64 | System
   deriving (Eq,Ord,Show,Generic)
-$(deriveJSON defaultOptions ''FiatPlayer)
+$(deriveJSON defaultOptions ''Player)
 
 data FutureMove m = FutureMove UTCTime m
   deriving (Eq,Show,Generic)

@@ -18,7 +18,7 @@ data Cmd s mv = StartGame | UpdateSettings s | MakeMove mv
 $(deriveJSON defaultOptions ''Cmd)
 
 data Msg s mv = Msg
-  { player :: FiatPlayer
+  { player :: Player
   , cmd    :: Cmd s mv
   } deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''Msg)
