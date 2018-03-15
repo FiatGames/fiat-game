@@ -73,7 +73,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       decoded :: Either String (Processed s g mv)
       decoded = eitherDecodeStrict echanMsg
 
-  processToServer :: FiatMoveSubmittedBy -> s -> FromFiat -> FiatToServerMsg -> m (FiatGameChannelMsg, Maybe FromFiat)
+  processToServer :: FiatMoveSubmittedBy -> s -> FromFiat -> FiatToServerMsg -> m (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
   processToServer submittedBy _ fromFiat (FiatToServerMsg ecmsg) = do
     (processed :: Processed s g mv) <- runExceptT $ do
       (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat
@@ -100,7 +100,9 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     msg <- toGameChannelMsg processed
     case processed of
       Left _                      -> return (msg,Nothing)
-      Right (SettingsAndState s mgs) -> return (msg, Just (FiatGameSettingsMsg (decodeUtf8 $ toStrict $ encode s), FiatGameStateMsg . decodeUtf8 . toStrict . encode <$> mgs))
+      Right (SettingsAndState s mgs) -> do
+        let stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
+        return (msg, Just (stage, (FiatGameSettingsMsg (decodeUtf8 $ toStrict $ encode s), FiatGameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)))
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
