@@ -40,7 +40,6 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   isPlayersTurn :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   isMoveValid :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   toClientSettingsAndState :: FiatPlayer -> SettingsAndState s g mv -> m (SettingsAndState cs cg mv)
-
   isCmdAuthorized :: FiatMoveSubmittedBy -> SettingsAndState s g mv -> ToServer.Msg s mv -> m Bool
   isCmdAuthorized (FiatMoveSubmittedBy System) _  _ = return True
   isCmdAuthorized (FiatMoveSubmittedBy (FiatPlayer p1)) _ fc = case ToServer.player fc of
@@ -53,14 +52,12 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       es' = over _Left pack <$> eitherDecodeStrict $ encodeUtf8 es
       megs' = fromMaybe (Right Nothing) $ over _Left pack <$> (eitherDecodeStrict . encodeUtf8 . getGameStateMsg <$> megs)
 
-  toClientMsg :: FiatPlayer -> Either (ToServer.MsgProcessed s g mv) (Either ToClient.Error (SettingsAndState s g mv)) ->  m (ToClient.Msg cs cg mv)
-  toClientMsg _ (Left (ToServer.Error err))   = return $ ToClient.Error err
-  toClientMsg p (Left (ToServer.MsgProcessed s))   = ToClient.Msg <$> toClientSettingsAndState p s
-  toClientMsg _ (Right (Left err)) = return $ ToClient.Error err
-  toClientMsg p (Right (Right s)) = ToClient.Msg <$> toClientSettingsAndState p s
+  toClientMsg :: FiatPlayer -> Either ToClient.Error (SettingsAndState s g mv) -> m (ToClient.Msg cs cg mv)
+  toClientMsg _ (Left err) = return $ ToClient.Error err
+  toClientMsg p (Right s)  = ToClient.Msg <$> toClientSettingsAndState p s
 
-  processToServer :: FiatMoveSubmittedBy -> FromFiat -> FiatToServertMsg -> m (ToServer.MsgProcessed s g mv)
-  processToServer submittedBy fromFiat (FiatToServertMsg ecmsg) = fmap ToServer.fromEither $ runExceptT $ do
+  processToServer :: FiatMoveSubmittedBy -> FromFiat -> FiatToServertMsg -> m (Either ToClient.Error (SettingsAndState s g mv))
+  processToServer submittedBy fromFiat (FiatToServertMsg ecmsg) = runExceptT $ do
     (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat
     cmsg <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
     ExceptT $ boolToEither ToClient.Unauthorized <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg
@@ -70,8 +67,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
         (Just _) -> ExceptT $ return $ Left ToClient.GameAlreadyStarted
         Nothing  -> lift (initialGameState s) >>= \case
           Left err -> ExceptT $ return $ Left $ ToClient.FailedToInitialize err
-          Right (s', gs :: GameState g mv) -> ExceptT $ return $ Right (s',Just gs)
-      ToServer.UpdateSettings s'         -> ExceptT $ return $ Right (s',Nothing)
+          Right (s', gs :: GameState g mv) -> ExceptT $ return $ Right $ SettingsAndState s' (Just gs)
+      ToServer.UpdateSettings s'         -> ExceptT $ return $ Right $ SettingsAndState s' Nothing
       ToServer.MakeMove mv -> case mgs of
         Nothing -> ExceptT $ return $ Left ToClient.GameIsNotStarted
         Just gs -> do
@@ -81,7 +78,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
           ExceptT $ boolToEither ToClient.NotYourTurn . (isSystem ||) <$> isPlayersTurn p s gs mv
           ExceptT $ boolToEither ToClient.InvalidMove <$> isMoveValid p s gs mv
           gs' <- lift $ makeMove p s gs mv
-          return (s, Just gs')
+          return $ SettingsAndState s (Just gs')
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
