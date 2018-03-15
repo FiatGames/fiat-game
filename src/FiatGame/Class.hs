@@ -64,8 +64,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
 
   --HACKY! need someway to associate an s with the correct ToClient.Msg cs cg mv
 
-  toClientMsg :: FiatPlayer -> s -> FiatGameChannelMsg -> m Text
-  toClientMsg p _ (FiatGameChannelMsg echanMsg) = case decoded of
+  toClientMsg :: s -> FiatPlayer -> FiatGameChannelMsg -> m Text
+  toClientMsg _ p (FiatGameChannelMsg echanMsg) = case decoded of
       Left err -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error (ToClient.DecodeError (pack err)) :: ToClient.Msg cs cg mv)
       Right (Left err) -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error err :: ToClient.Msg cs cg mv)
       Right (Right s) -> decodeUtf8 . toStrict . encode . ToClient.Msg <$> toClientSettingsAndState p s
@@ -73,8 +73,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       decoded :: Either String (Processed s g mv)
       decoded = eitherDecodeStrict echanMsg
 
-  processToServer :: FiatMoveSubmittedBy -> s -> FromFiat -> FiatToServerMsg -> m (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
-  processToServer submittedBy _ fromFiat (FiatToServerMsg ecmsg) = do
+  processToServer :: s -> FiatMoveSubmittedBy -> FromFiat -> FiatToServerMsg -> m (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+  processToServer _ submittedBy fromFiat (FiatToServerMsg ecmsg) = do
     (processed :: Processed s g mv) <- runExceptT $ do
       (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat
       cmsg <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
