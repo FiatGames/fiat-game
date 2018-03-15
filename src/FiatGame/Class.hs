@@ -5,11 +5,13 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 
-module FiatGame.Class where
+module FiatGame.Class (FiatGame(..), FiatGameSettingsMsg(..), FiatGameStateMsg(..), FiatToServerMsg(..), FiatMoveSubmittedBy(..)) where
 
 import           Control.Lens
 import           Control.Monad.Except
 import           Data.Aeson
+import           Data.ByteString         (ByteString)
+import           Data.ByteString.Lazy    (toStrict)
 import           Data.Maybe
 import           Data.Text               (Text, pack)
 import           Data.Text.Encoding
@@ -30,6 +32,9 @@ newtype FiatToServerMsg = FiatToServerMsg {getToServerMsg :: Text}
 newtype FiatMoveSubmittedBy = FiatMoveSubmittedBy {getSubmittedBy :: FiatPlayer }
   deriving (Eq,Show,Generic)
 
+newtype FiatGameChannelMsg = FiatGameChannelMsg ByteString
+  deriving (Eq,Show)
+
 type FromFiat = (FiatGameSettingsMsg, Maybe FiatGameStateMsg)
 type Processed s g mv = Either ToClient.Error (SettingsAndState s g mv)
 
@@ -41,6 +46,9 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   isPlayersTurn :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   isMoveValid :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   toClientSettingsAndState :: FiatPlayer -> SettingsAndState s g mv -> m (SettingsAndState cs cg mv)
+
+  toGameChannelMsg :: Processed s g mv -> m FiatGameChannelMsg
+  toGameChannelMsg = return . FiatGameChannelMsg . toStrict . encode
 
   isCmdAuthorized :: FiatMoveSubmittedBy -> SettingsAndState s g mv -> ToServer.Msg s mv -> m Bool
   isCmdAuthorized (FiatMoveSubmittedBy System) _  _ = return True
