@@ -13,6 +13,7 @@ import           Data.Aeson
 import           Data.ByteString         (ByteString)
 import           Data.ByteString.Lazy    (toStrict)
 import           Data.Maybe
+import           Data.Proxy
 import           Data.Text               (Text, pack)
 import           Data.Text.Encoding
 import           FiatGame.GameState
@@ -62,9 +63,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   toGameChannelMsg :: Processed s g mv -> m ChannelMsg
   toGameChannelMsg = return . ChannelMsg . toStrict . encode
 
-  --HACKY! need someway to associate an s with the correct ToClient.Msg cs cg mv
-
-  toClientMsg :: s -> FiatPlayer -> ChannelMsg -> m Text
+  toClientMsg :: Proxy s -> FiatPlayer -> ChannelMsg -> m Text
   toClientMsg _ p (ChannelMsg echanMsg) = case decoded of
       Left err -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error (ToClient.DecodeError (pack err)) :: ToClient.Msg cs cg mv)
       Right (Left err) -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error err :: ToClient.Msg cs cg mv)
@@ -73,7 +72,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       decoded :: Either String (Processed s g mv)
       decoded = eitherDecodeStrict echanMsg
 
-  processToServer :: s -> FiatMoveSubmittedBy -> FromFiat -> FiatToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
+  processToServer :: Proxy s -> FiatMoveSubmittedBy -> FromFiat -> FiatToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
   processToServer _ submittedBy fromFiat (FiatToServerMsg ecmsg) = do
     (processed :: Processed s g mv) <- runExceptT $ do
       (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat

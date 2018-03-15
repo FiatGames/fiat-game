@@ -11,6 +11,7 @@ import           Control.Monad.Trans.Maybe
 import           Data.Aeson
 import           Data.Aeson.TH
 import           Data.ByteString.Lazy      (ByteString, toStrict)
+import           Data.Proxy
 import           Data.Text                 (Text)
 import           Data.Text.Encoding
 import           FiatGame.Class
@@ -115,7 +116,7 @@ updateSettings =  FiatToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg
 
 --Helper for all tests
 process :: FiatGame m NoGame NoSettings NoMoves ClientNoGame ClientNoSettings => FiatPlayer -> SettingsMsg -> Maybe GameStateMsg -> FiatToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
-process p s mgs = processToServer (undefined :: NoSettings) (FiatMoveSubmittedBy p) (s, mgs)
+process p s mgs = processToServer (Proxy :: Proxy NoSettings) (FiatMoveSubmittedBy p) (s, mgs)
 
 --SUCESS
 successResult :: NoSettings -> Maybe (GameState NoGame NoMoves) -> (ChannelMsg, Maybe (GameStage,FromFiat))
@@ -125,7 +126,7 @@ successResult s mgs = (ChannelMsg (toStrict (encode (Right (SettingsAndState s m
 goodProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 goodProcessToServer = process (FiatPlayer 0) initSettingsMsg (Just initialStateMsg) goodMove
 goodToClientMsg :: Identity Text
-goodToClientMsg = goodProcessToServer >>= toClientMsg (undefined :: NoSettings) (FiatPlayer 0)  . fst
+goodToClientMsg = goodProcessToServer >>= toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 0)  . fst
 startGameProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 startGameProcessToServer = process System twoPlayerSettingsMsg Nothing startGame
 updateSettingsProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
@@ -190,6 +191,6 @@ main = hspec $ do
     it "good - ToServer.MsgProcessed"
       $ runIdentity goodToClientMsg `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg $ SettingsAndState initClientSettings $ Just $ GameState Playing (ClientNoGame False) Nothing :: NoGameClientMsg))
     it "good - SettingsAndState s Nothing"
-      $ runIdentity ( toGameChannelMsg (Right(SettingsAndState initSettings Nothing)) >>= toClientMsg (undefined :: NoSettings) (FiatPlayer 1)) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings Nothing) :: NoGameClientMsg))
+      $ runIdentity ( toGameChannelMsg (Right(SettingsAndState initSettings Nothing)) >>= toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1)) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings Nothing) :: NoGameClientMsg))
     it "good - SettingsAndState s (Just gs)"
-      $ runIdentity (toGameChannelMsg (Right (SettingsAndState initSettings (Just initialState))) >>= toClientMsg (undefined :: NoSettings) (FiatPlayer 1)) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState)) :: NoGameClientMsg))
+      $ runIdentity (toGameChannelMsg (Right (SettingsAndState initSettings (Just initialState))) >>= toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1)) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState)) :: NoGameClientMsg))
