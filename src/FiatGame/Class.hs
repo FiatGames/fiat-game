@@ -41,10 +41,10 @@ type Processed s g mv = Either ToClient.Error (SettingsAndState s g mv)
 
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSON cg, ToJSON s, FromJSON s, ToJSON cs, FromJSON cs) => FiatGame m g s mv cg cs | s -> mv, s -> g, s -> cg, s -> cs where
   defaultSettings :: m s
-  addFiatPlayer :: FiatPlayer -> s -> m (Maybe s)
+  addPlayer :: FiatPlayer -> s -> m (Maybe s)
   initialGameState :: s -> m (Either Text (s, GameState g mv))
   makeMove :: FiatPlayer -> s -> GameState g mv -> mv -> m (GameState g mv)
-  isFiatPlayersTurn :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
+  isPlayersTurn :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   isMoveValid :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   toClientSettingsAndState :: FiatPlayer -> SettingsAndState s g mv -> m (SettingsAndState cs cg mv)
 
@@ -92,7 +92,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
             let isSystem = case p of
                             System -> True
                             _      -> False
-            ExceptT $ boolToEither ToClient.NotYourTurn . (isSystem ||) <$> isFiatPlayersTurn p s gs mv
+            ExceptT $ boolToEither ToClient.NotYourTurn . (isSystem ||) <$> isPlayersTurn p s gs mv
             ExceptT $ boolToEither ToClient.InvalidMove <$> isMoveValid p s gs mv
             gs' <- lift $ makeMove p s gs mv
             return $ SettingsAndState s (Just gs')
@@ -106,4 +106,3 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
 boolToEither a False = Left a
-

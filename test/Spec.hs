@@ -50,7 +50,7 @@ $(deriveJSON defaultOptions ''NoMoves)
 
 instance FiatGame Identity NoGame NoSettings NoMoves ClientNoGame ClientNoSettings where
   defaultSettings = return initSettings
-  addFiatPlayer p (NoSettings ps c ())
+  addPlayer p (NoSettings ps c ())
     | length ps < 2 = return $ Just (NoSettings (p:ps) c ())
     | otherwise = return Nothing
   makeMove _ _ (GameState stage (NoGame True _) _) _ = return $ GameState stage (NoGame False ()) Nothing
@@ -58,9 +58,9 @@ instance FiatGame Identity NoGame NoSettings NoMoves ClientNoGame ClientNoSettin
   isMoveValid _ _ (GameState _ (NoGame True _) _) ToB  = return True
   isMoveValid _ _ (GameState _ (NoGame False _) _) ToA = return True
   isMoveValid _ _ _ _                                  = return False
-  isFiatPlayersTurn (FiatPlayer 0) _ (GameState _ (NoGame True ()) _) _ = return True
-  isFiatPlayersTurn (FiatPlayer 1) _ (GameState _ (NoGame False _) _) _ = return True
-  isFiatPlayersTurn _ _ _ _                                         = return False
+  isPlayersTurn (FiatPlayer 0) _ (GameState _ (NoGame True ()) _) _ = return True
+  isPlayersTurn (FiatPlayer 1) _ (GameState _ (NoGame False _) _) _ = return True
+  isPlayersTurn _ _ _ _                                         = return False
   initialGameState (NoSettings ps c ())
     | length ps < 2 = return $ Left "Not enough players"
     | otherwise = return $ Right (NoSettings ps (not c) (), GameState Playing (NoGame True ()) Nothing)
@@ -89,11 +89,11 @@ twoFiatPlayersSettingsAfter = NoSettings [FiatPlayer 0, FiatPlayer 1] True ()
 goodSettings :: Maybe NoSettings
 goodSettings = runIdentity $ do
   i <- defaultSettings
-  runMaybeT $ foldM (\s p -> MaybeT $ addFiatPlayer p s) i [FiatPlayer 0, FiatPlayer 1]
+  runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1]
 badSettings :: Maybe NoSettings
 badSettings = runIdentity $ do
     i <- defaultSettings
-    runMaybeT $ foldM (\s p -> MaybeT $ addFiatPlayer p s) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
+    runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
 
 initialState  :: GameState NoGame NoMoves
 initialState = GameState Playing (NoGame True ()) Nothing
