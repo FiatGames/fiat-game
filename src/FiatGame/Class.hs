@@ -62,12 +62,12 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   toGameChannelMsg :: Processed s g mv -> m FiatGameChannelMsg
   toGameChannelMsg = return . FiatGameChannelMsg . toStrict . encode
 
-  --HACKY!
-  toClientMsg :: FiatPlayer -> s -> FiatGameChannelMsg -> m (ToClient.Msg cs cg mv)
+  --HACKY! need someway to associate an s with the correct ToClient.Msg cs cg mv
+  toClientMsg :: FiatPlayer -> s -> FiatGameChannelMsg -> m Text
   toClientMsg p _ (FiatGameChannelMsg echanMsg) = case decoded of
-      Left err -> return $ ToClient.Error $ ToClient.DecodeError $ pack err
-      Right (Left err) -> return $ ToClient.Error err
-      Right (Right s) -> ToClient.Msg <$> toClientSettingsAndState p s
+      Left err -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error (ToClient.DecodeError (pack err)) :: ToClient.Msg cs cg mv)
+      Right (Left err) -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error err :: ToClient.Msg cs cg mv)
+      Right (Right s) -> decodeUtf8 . toStrict . encode . ToClient.Msg <$> toClientSettingsAndState p s
     where
       decoded :: Either String (Processed s g mv)
       decoded = eitherDecodeStrict echanMsg
