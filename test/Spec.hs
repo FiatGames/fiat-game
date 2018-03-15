@@ -136,6 +136,11 @@ systemAllowedProcessToServer = process System initSettingsMsg (Just initialState
 moveOnOthersBehalfProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 moveOnOthersBehalfProcessToServer = process System initSettingsMsg (Just initialStateMsg) goodMove
 
+
+foo = ChannelMsg $ toStrict $ encode (Right (SettingsAndState initSettings Nothing) :: NoGameFiatGameState)
+foo2 = ChannelMsg $ toStrict $ encode (Right (SettingsAndState initSettings (Just initialState)) :: NoGameFiatGameState)
+
+
 --FAILURES
 failResult :: ToClient.Error -> (ChannelMsg, Maybe (GameStage,FromFiat))
 failResult err = (ChannelMsg (toStrict (encode (Left err :: NoGameFiatGameState))), Nothing)
@@ -191,6 +196,6 @@ main = hspec $ do
     it "good - ToServer.MsgProcessed"
       $ runIdentity goodToClientMsg `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg $ SettingsAndState initClientSettings $ Just $ GameState Playing (ClientNoGame False) Nothing :: NoGameClientMsg))
     it "good - SettingsAndState s Nothing"
-      $ runIdentity ( toGameChannelMsg (Right(SettingsAndState initSettings Nothing)) >>= toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1)) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings Nothing) :: NoGameClientMsg))
+      $ runIdentity ( toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1) foo) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings Nothing) :: NoGameClientMsg))
     it "good - SettingsAndState s (Just gs)"
-      $ runIdentity (toGameChannelMsg (Right (SettingsAndState initSettings (Just initialState))) >>= toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1)) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState)) :: NoGameClientMsg))
+      $ runIdentity ( toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1) foo2) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState)) :: NoGameClientMsg))

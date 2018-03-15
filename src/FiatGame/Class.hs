@@ -9,16 +9,17 @@ module FiatGame.Class (FiatGame(..), SettingsMsg(..), GameStateMsg(..), ToServer
 
 import           Control.Lens
 import           Control.Monad.Except
+import           Control.Monad.Trans.Maybe
 import           Data.Aeson
-import           Data.ByteString         (ByteString)
-import           Data.ByteString.Lazy    (toStrict)
+import           Data.ByteString           (ByteString)
+import           Data.ByteString.Lazy      (toStrict)
 import           Data.Maybe
 import           Data.Proxy
-import           Data.Text               (Text, pack)
+import           Data.Text                 (Text, pack)
 import           Data.Text.Encoding
 import           FiatGame.GameState
-import qualified FiatGame.ToClient.Types as ToClient
-import qualified FiatGame.ToServer.Types as ToServer
+import qualified FiatGame.ToClient.Types   as ToClient
+import qualified FiatGame.ToServer.Types   as ToServer
 import           GHC.Generics
 
 newtype SettingsMsg = SettingsMsg { getSettingsMsg :: Text }
@@ -60,8 +61,20 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       es' = over _Left pack <$> eitherDecodeStrict $ encodeUtf8 es
       megs' = fromMaybe (Right Nothing) $ over _Left pack <$> (eitherDecodeStrict . encodeUtf8 . getGameStateMsg <$> megs)
 
-  toGameChannelMsg :: Processed s g mv -> m ChannelMsg
-  toGameChannelMsg = return . ChannelMsg . toStrict . encode
+  initialFromFiat :: Proxy s -> FiatPlayer -> m SettingsMsg
+  initialFromFiat _ p = do
+    s :: s <- defaultSettings
+    (Just s') <- addPlayer p s
+    return $ SettingsMsg $ decodeUtf8 $ toStrict $ encode s'
+
+  fromFiat :: Proxy s -> FromFiat -> m ChannelMsg
+  fromFiat _ f = ChannelMsg . toStrict . encode <$> (toSettingsAndState f :: m (Processed s g mv))
+
+  tryAddPlayer :: Proxy s -> FiatPlayer -> SettingsMsg -> m (Maybe SettingsMsg)
+  tryAddPlayer _ p (SettingsMsg es) = runMaybeT $ do
+    s :: s <- MaybeT $ return $ decodeStrict $ encodeUtf8 es
+    added <- MaybeT $ addPlayer p s
+    return $ SettingsMsg $ decodeUtf8 $ toStrict $ encode added
 
   toClientMsg :: Proxy s -> FiatPlayer -> ChannelMsg -> m Text
   toClientMsg _ p (ChannelMsg echanMsg) = case decoded of
@@ -73,9 +86,9 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       decoded = eitherDecodeStrict echanMsg
 
   processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
-  processToServer _ submittedBy fromFiat (ToServerMsg ecmsg) = do
+  processToServer _ submittedBy f (ToServerMsg ecmsg) = do
     (processed :: Processed s g mv) <- runExceptT $ do
-      (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat
+      (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState f
       cmsg <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
       ExceptT $ boolToEither ToClient.Unauthorized <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg
       let p = ToServer.player cmsg
@@ -96,7 +109,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
             ExceptT $ boolToEither ToClient.InvalidMove <$> isMoveValid p s gs mv
             gs' <- lift $ makeMove p s gs mv
             return $ SettingsAndState s (Just gs')
-    msg <- toGameChannelMsg processed
+    let msg = ChannelMsg $ toStrict $ encode processed
     case processed of
       Left _                      -> return (msg,Nothing)
       Right (SettingsAndState s mgs) -> do
