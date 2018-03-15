@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 
-module FiatGame.Class (FiatGame(..), FiatGameSettingsMsg(..), FiatGameStateMsg(..), FiatToServerMsg(..), FiatMoveSubmittedBy(..), FiatGameChannelMsg) where
+module FiatGame.Class (FiatGame(..), FiatGameSettingsMsg(..), FiatGameStateMsg(..), FiatToServerMsg(..), FiatMoveSubmittedBy(..), FiatGameChannelMsg(..), FromFiat) where
 
 import           Control.Lens
 import           Control.Monad.Except
@@ -63,6 +63,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   toGameChannelMsg = return . FiatGameChannelMsg . toStrict . encode
 
   --HACKY! need someway to associate an s with the correct ToClient.Msg cs cg mv
+
   toClientMsg :: FiatPlayer -> s -> FiatGameChannelMsg -> m Text
   toClientMsg p _ (FiatGameChannelMsg echanMsg) = case decoded of
       Left err -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error (ToClient.DecodeError (pack err)) :: ToClient.Msg cs cg mv)
@@ -72,29 +73,34 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       decoded :: Either String (Processed s g mv)
       decoded = eitherDecodeStrict echanMsg
 
-  processToServer :: FiatMoveSubmittedBy -> FromFiat -> FiatToServerMsg -> m (Processed s g mv)
-  processToServer submittedBy fromFiat (FiatToServerMsg ecmsg) = runExceptT $ do
-    (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat
-    cmsg <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
-    ExceptT $ boolToEither ToClient.Unauthorized <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg
-    let p = ToServer.player cmsg
-    case ToServer.cmd cmsg of
-      ToServer.StartGame                -> case mgs of
-        (Just _) -> ExceptT $ return $ Left ToClient.GameAlreadyStarted
-        Nothing  -> lift (initialGameState s) >>= \case
-          Left err -> ExceptT $ return $ Left $ ToClient.FailedToInitialize err
-          Right (s', gs :: GameState g mv) -> ExceptT $ return $ Right $ SettingsAndState s' (Just gs)
-      ToServer.UpdateSettings s'         -> ExceptT $ return $ Right $ SettingsAndState s' Nothing
-      ToServer.MakeMove mv -> case mgs of
-        Nothing -> ExceptT $ return $ Left ToClient.GameIsNotStarted
-        Just gs -> do
-          let isSystem = case p of
-                          System -> True
-                          _      -> False
-          ExceptT $ boolToEither ToClient.NotYourTurn . (isSystem ||) <$> isPlayersTurn p s gs mv
-          ExceptT $ boolToEither ToClient.InvalidMove <$> isMoveValid p s gs mv
-          gs' <- lift $ makeMove p s gs mv
-          return $ SettingsAndState s (Just gs')
+  processToServer :: FiatMoveSubmittedBy -> s -> FromFiat -> FiatToServerMsg -> m (FiatGameChannelMsg, Maybe FromFiat)
+  processToServer submittedBy _ fromFiat (FiatToServerMsg ecmsg) = do
+    (processed :: Processed s g mv) <- runExceptT $ do
+      (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat
+      cmsg <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
+      ExceptT $ boolToEither ToClient.Unauthorized <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg
+      let p = ToServer.player cmsg
+      case ToServer.cmd cmsg of
+        ToServer.StartGame                -> case mgs of
+          (Just _) -> ExceptT $ return $ Left ToClient.GameAlreadyStarted
+          Nothing  -> lift (initialGameState s) >>= \case
+            Left err -> ExceptT $ return $ Left $ ToClient.FailedToInitialize err
+            Right (s', gs :: GameState g mv) -> ExceptT $ return $ Right $ SettingsAndState s' (Just gs)
+        ToServer.UpdateSettings s'         -> ExceptT $ return $ Right $ SettingsAndState s' Nothing
+        ToServer.MakeMove mv -> case mgs of
+          Nothing -> ExceptT $ return $ Left ToClient.GameIsNotStarted
+          Just gs -> do
+            let isSystem = case p of
+                            System -> True
+                            _      -> False
+            ExceptT $ boolToEither ToClient.NotYourTurn . (isSystem ||) <$> isPlayersTurn p s gs mv
+            ExceptT $ boolToEither ToClient.InvalidMove <$> isMoveValid p s gs mv
+            gs' <- lift $ makeMove p s gs mv
+            return $ SettingsAndState s (Just gs')
+    msg <- toGameChannelMsg processed
+    case processed of
+      Left _                      -> return (msg,Nothing)
+      Right (SettingsAndState s mgs) -> return (msg, Just (FiatGameSettingsMsg (decodeUtf8 $ toStrict $ encode s), FiatGameStateMsg . decodeUtf8 . toStrict . encode <$> mgs))
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
