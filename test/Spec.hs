@@ -74,14 +74,14 @@ initSettings :: NoSettings
 initSettings = NoSettings [] False ()
 initClientSettings :: ClientNoSettings
 initClientSettings = ClientNoSettings [] False
-initSettingsMsg :: FiatGameSettingsMsg
-initSettingsMsg = FiatGameSettingsMsg $ decodeUtf8 $ toStrict $ encode initSettings
+initSettingsMsg :: SettingsMsg
+initSettingsMsg = SettingsMsg $ decodeUtf8 $ toStrict $ encode initSettings
 changedSettings :: NoSettings
 changedSettings = NoSettings [] True ()
 twoPlayersSettings :: NoSettings
 twoPlayersSettings = NoSettings [FiatPlayer 0, FiatPlayer 1] False ()
-twoPlayerSettingsMsg :: FiatGameSettingsMsg
-twoPlayerSettingsMsg = FiatGameSettingsMsg $ decodeUtf8 $ toStrict $ encode twoPlayersSettings
+twoPlayerSettingsMsg :: SettingsMsg
+twoPlayerSettingsMsg = SettingsMsg $ decodeUtf8 $ toStrict $ encode twoPlayersSettings
 twoPlayersSettingsAfter :: NoSettings
 twoPlayersSettingsAfter = NoSettings [FiatPlayer 0, FiatPlayer 1] True ()
 
@@ -98,8 +98,8 @@ initialState  :: GameState NoGame NoMoves
 initialState = GameState Playing (NoGame True ()) Nothing
 initialClientState  :: GameState ClientNoGame NoMoves
 initialClientState = GameState Playing (ClientNoGame True) Nothing
-initialStateMsg :: FiatGameStateMsg
-initialStateMsg = FiatGameStateMsg $ decodeUtf8 $ toStrict $ encode initialState
+initialStateMsg :: GameStateMsg
+initialStateMsg = GameStateMsg $ decodeUtf8 $ toStrict $ encode initialState
 systemMove :: FiatToServerMsg
 systemMove = FiatToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.MakeMove ToB) :: NoGameToServerMsg)
 goodMove :: FiatToServerMsg
@@ -114,45 +114,45 @@ updateSettings :: FiatToServerMsg
 updateSettings =  FiatToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.UpdateSettings changedSettings) :: NoGameToServerMsg)
 
 --Helper for all tests
-process :: FiatGame m NoGame NoSettings NoMoves ClientNoGame ClientNoSettings => FiatPlayer -> FiatGameSettingsMsg -> Maybe FiatGameStateMsg -> FiatToServerMsg -> m (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+process :: FiatGame m NoGame NoSettings NoMoves ClientNoGame ClientNoSettings => FiatPlayer -> SettingsMsg -> Maybe GameStateMsg -> FiatToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
 process p s mgs = processToServer (undefined :: NoSettings) (FiatMoveSubmittedBy p) (s, mgs)
 
 --SUCESS
-successResult :: NoSettings -> Maybe (GameState NoGame NoMoves) -> (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
-successResult s mgs = (FiatGameChannelMsg (toStrict (encode (Right (SettingsAndState s mgs) :: NoGameFiatGameState))), Just (stage, (FiatGameSettingsMsg $ decodeUtf8 $ toStrict $ encode s, FiatGameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)))
+successResult :: NoSettings -> Maybe (GameState NoGame NoMoves) -> (ChannelMsg, Maybe (GameStage,FromFiat))
+successResult s mgs = (ChannelMsg (toStrict (encode (Right (SettingsAndState s mgs) :: NoGameFiatGameState))), Just (stage, (SettingsMsg $ decodeUtf8 $ toStrict $ encode s, GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)))
   where stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
 
-goodProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+goodProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 goodProcessToServer = process (FiatPlayer 0) initSettingsMsg (Just initialStateMsg) goodMove
 goodToClientMsg :: Identity Text
 goodToClientMsg = goodProcessToServer >>= toClientMsg (undefined :: NoSettings) (FiatPlayer 0)  . fst
-startGameProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+startGameProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 startGameProcessToServer = process System twoPlayerSettingsMsg Nothing startGame
-updateSettingsProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+updateSettingsProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 updateSettingsProcessToServer = process System initSettingsMsg Nothing updateSettings
-systemAllowedProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+systemAllowedProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 systemAllowedProcessToServer = process System initSettingsMsg (Just initialStateMsg) systemMove
-moveOnOthersBehalfProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+moveOnOthersBehalfProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 moveOnOthersBehalfProcessToServer = process System initSettingsMsg (Just initialStateMsg) goodMove
 
 --FAILURES
-failResult :: ToClient.Error -> (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
-failResult err = (FiatGameChannelMsg (toStrict (encode (Left err :: NoGameFiatGameState))), Nothing)
+failResult :: ToClient.Error -> (ChannelMsg, Maybe (GameStage,FromFiat))
+failResult err = (ChannelMsg (toStrict (encode (Left err :: NoGameFiatGameState))), Nothing)
 
-failedToStartProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+failedToStartProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 failedToStartProcessToServer = process System initSettingsMsg Nothing startGame
-unauthorizedProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+unauthorizedProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 unauthorizedProcessToServer = process (FiatPlayer 0) initSettingsMsg (Just initialStateMsg) unauthorizedMove
-notYourTurnProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+notYourTurnProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 notYourTurnProcessToServer = process (FiatPlayer 1) initSettingsMsg (Just initialStateMsg) unauthorizedMove
-invalidProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+invalidProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 invalidProcessToServer = process (FiatPlayer 0) initSettingsMsg (Just initialStateMsg) invalidMove
-gameNotStartedProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+gameNotStartedProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 gameNotStartedProcessToServer = process (FiatPlayer 0) initSettingsMsg Nothing invalidMove
-gameAlreadyStartedProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+gameAlreadyStartedProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 gameAlreadyStartedProcessToServer = process System initSettingsMsg (Just initialStateMsg) startGame
-decodeErrorProcessToServer :: Identity (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
-decodeErrorProcessToServer = process (FiatPlayer 1) initSettingsMsg (Just (FiatGameStateMsg "")) (FiatToServerMsg "")
+decodeErrorProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
+decodeErrorProcessToServer = process (FiatPlayer 1) initSettingsMsg (Just (GameStateMsg "")) (FiatToServerMsg "")
 
 main :: IO ()
 main = hspec $ do

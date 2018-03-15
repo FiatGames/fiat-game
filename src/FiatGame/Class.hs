@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 
-module FiatGame.Class (FiatGame(..), FiatGameSettingsMsg(..), FiatGameStateMsg(..), FiatToServerMsg(..), FiatMoveSubmittedBy(..), FiatGameChannelMsg(..), FromFiat) where
+module FiatGame.Class (FiatGame(..), SettingsMsg(..), GameStateMsg(..), FiatToServerMsg(..), FiatMoveSubmittedBy(..), ChannelMsg(..), FromFiat) where
 
 import           Control.Lens
 import           Control.Monad.Except
@@ -20,10 +20,10 @@ import qualified FiatGame.ToClient.Types as ToClient
 import qualified FiatGame.ToServer.Types as ToServer
 import           GHC.Generics
 
-newtype FiatGameSettingsMsg = FiatGameSettingsMsg {getGameSettingsMsg :: Text}
+newtype SettingsMsg = SettingsMsg {getSettingsMsg :: Text}
   deriving (Eq,Show,Generic)
 
-newtype FiatGameStateMsg = FiatGameStateMsg {getGameStateMsg :: Text}
+newtype GameStateMsg = GameStateMsg {getGameStateMsg :: Text}
   deriving (Eq,Show,Generic)
 
 newtype FiatToServerMsg = FiatToServerMsg {getToServerMsg :: Text}
@@ -32,10 +32,10 @@ newtype FiatToServerMsg = FiatToServerMsg {getToServerMsg :: Text}
 newtype FiatMoveSubmittedBy = FiatMoveSubmittedBy {getSubmittedBy :: FiatPlayer }
   deriving (Eq,Show,Generic)
 
-newtype FiatGameChannelMsg = FiatGameChannelMsg ByteString
+newtype ChannelMsg = ChannelMsg ByteString
   deriving (Eq,Show)
 
-type FromFiat = (FiatGameSettingsMsg, Maybe FiatGameStateMsg)
+type FromFiat = (SettingsMsg, Maybe GameStateMsg)
 type Processed s g mv = Either ToClient.Error (SettingsAndState s g mv)
 
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSON cg, ToJSON s, FromJSON s, ToJSON cs, FromJSON cs) => FiatGame m g s mv cg cs | s -> mv, s -> g, s -> cg, s -> cs where
@@ -54,18 +54,18 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     (FiatPlayer p2) -> return $ p1 == p2
 
   toSettingsAndState :: FromFiat -> m (Processed s g mv)
-  toSettingsAndState (FiatGameSettingsMsg es,megs) = return $ over _Left ToClient.DecodeError $ SettingsAndState <$> es' <*> megs'
+  toSettingsAndState (SettingsMsg es,megs) = return $ over _Left ToClient.DecodeError $ SettingsAndState <$> es' <*> megs'
     where
       es' = over _Left pack <$> eitherDecodeStrict $ encodeUtf8 es
       megs' = fromMaybe (Right Nothing) $ over _Left pack <$> (eitherDecodeStrict . encodeUtf8 . getGameStateMsg <$> megs)
 
-  toGameChannelMsg :: Processed s g mv -> m FiatGameChannelMsg
-  toGameChannelMsg = return . FiatGameChannelMsg . toStrict . encode
+  toGameChannelMsg :: Processed s g mv -> m ChannelMsg
+  toGameChannelMsg = return . ChannelMsg . toStrict . encode
 
   --HACKY! need someway to associate an s with the correct ToClient.Msg cs cg mv
 
-  toClientMsg :: s -> FiatPlayer -> FiatGameChannelMsg -> m Text
-  toClientMsg _ p (FiatGameChannelMsg echanMsg) = case decoded of
+  toClientMsg :: s -> FiatPlayer -> ChannelMsg -> m Text
+  toClientMsg _ p (ChannelMsg echanMsg) = case decoded of
       Left err -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error (ToClient.DecodeError (pack err)) :: ToClient.Msg cs cg mv)
       Right (Left err) -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error err :: ToClient.Msg cs cg mv)
       Right (Right s) -> decodeUtf8 . toStrict . encode . ToClient.Msg <$> toClientSettingsAndState p s
@@ -73,7 +73,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       decoded :: Either String (Processed s g mv)
       decoded = eitherDecodeStrict echanMsg
 
-  processToServer :: s -> FiatMoveSubmittedBy -> FromFiat -> FiatToServerMsg -> m (FiatGameChannelMsg, Maybe (GameStage,FromFiat))
+  processToServer :: s -> FiatMoveSubmittedBy -> FromFiat -> FiatToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
   processToServer _ submittedBy fromFiat (FiatToServerMsg ecmsg) = do
     (processed :: Processed s g mv) <- runExceptT $ do
       (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat
@@ -102,7 +102,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       Left _                      -> return (msg,Nothing)
       Right (SettingsAndState s mgs) -> do
         let stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
-        return (msg, Just (stage, (FiatGameSettingsMsg (decodeUtf8 $ toStrict $ encode s), FiatGameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)))
+        return (msg, Just (stage, (SettingsMsg (decodeUtf8 $ toStrict $ encode s), GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)))
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
