@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 
-module FiatGame.Class (FiatGame(..), FiatGameSettingsMsg(..), FiatGameStateMsg(..), FiatToServerMsg(..), FiatMoveSubmittedBy(..)) where
+module FiatGame.Class (FiatGame(..), FiatGameSettingsMsg(..), FiatGameStateMsg(..), FiatToServerMsg(..), FiatMoveSubmittedBy(..), FiatGameChannelMsg) where
 
 import           Control.Lens
 import           Control.Monad.Except
