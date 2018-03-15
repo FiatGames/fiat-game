@@ -47,9 +47,6 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   isMoveValid :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   toClientSettingsAndState :: FiatPlayer -> SettingsAndState s g mv -> m (SettingsAndState cs cg mv)
 
-  toGameChannelMsg :: Processed s g mv -> m FiatGameChannelMsg
-  toGameChannelMsg = return . FiatGameChannelMsg . toStrict . encode
-
   isCmdAuthorized :: FiatMoveSubmittedBy -> SettingsAndState s g mv -> ToServer.Msg s mv -> m Bool
   isCmdAuthorized (FiatMoveSubmittedBy System) _  _ = return True
   isCmdAuthorized (FiatMoveSubmittedBy (FiatPlayer p1)) _ fc = case ToServer.player fc of
@@ -62,9 +59,18 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       es' = over _Left pack <$> eitherDecodeStrict $ encodeUtf8 es
       megs' = fromMaybe (Right Nothing) $ over _Left pack <$> (eitherDecodeStrict . encodeUtf8 . getGameStateMsg <$> megs)
 
-  toClientMsg :: FiatPlayer -> Processed s g mv -> m (ToClient.Msg cs cg mv)
-  toClientMsg _ (Left err) = return $ ToClient.Error err
-  toClientMsg p (Right s)  = ToClient.Msg <$> toClientSettingsAndState p s
+  toGameChannelMsg :: Processed s g mv -> m FiatGameChannelMsg
+  toGameChannelMsg = return . FiatGameChannelMsg . toStrict . encode
+
+  --HACKY!
+  toClientMsg :: FiatPlayer -> s -> FiatGameChannelMsg -> m (ToClient.Msg cs cg mv)
+  toClientMsg p _ (FiatGameChannelMsg echanMsg) = case decoded of
+      Left err -> return $ ToClient.Error $ ToClient.DecodeError $ pack err
+      Right (Left err) -> return $ ToClient.Error err
+      Right (Right s) -> ToClient.Msg <$> toClientSettingsAndState p s
+    where
+      decoded :: Either String (Processed s g mv)
+      decoded = eitherDecodeStrict echanMsg
 
   processToServer :: FiatMoveSubmittedBy -> FromFiat -> FiatToServerMsg -> m (Processed s g mv)
   processToServer submittedBy fromFiat (FiatToServerMsg ecmsg) = runExceptT $ do
