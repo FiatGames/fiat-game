@@ -14,7 +14,7 @@ import           Data.Text          (Text)
 import           FiatGame.GameState
 import           GHC.Generics
 
-data Error = GameIsNotStarted | GameAlreadyStarted | InvalidMove | Unauthorized | NotYourTurn | NotEnoughFiatPlayers | DecodeError Text | FailedToInitialize Text
+data Error = GameIsNotStarted | GameAlreadyStarted | InvalidMove | Unauthorized | NotYourTurn | NotEnoughPlayers | DecodeError Text | FailedToInitialize Text
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''Error)
 
