@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 
-module FiatGame.Class (FiatGame(..), SettingsMsg(..), GameStateMsg(..), ToServerMsg(..), MoveSubmittedBy(..), ChannelMsg(..), FromFiat) where
+module FiatGame.Class (FiatGame(..), SettingsMsg(..), GameStateMsg(..), ToServerMsg(..), MoveSubmittedBy(..), ChannelMsg(..), ToClientMsg(..), FromFiat) where
 
 import           Control.Lens
 import           Control.Monad.Except
@@ -29,6 +29,9 @@ newtype GameStateMsg = GameStateMsg { getGameStateMsg :: Text }
   deriving (Eq,Show,Generic)
 
 newtype ToServerMsg = ToServerMsg { getToServerMsg :: Text }
+  deriving (Eq,Show,Generic)
+
+newtype ToClientMsg = ToClientMsg { getToClientMsg :: Text }
   deriving (Eq,Show,Generic)
 
 newtype MoveSubmittedBy = MoveSubmittedBy { getSubmittedBy :: FiatPlayer }
@@ -76,11 +79,11 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     added <- MaybeT $ addPlayer p s
     return $ SettingsMsg $ decodeUtf8 $ toStrict $ encode added
 
-  toClientMsg :: Proxy s -> FiatPlayer -> ChannelMsg -> m Text
+  toClientMsg :: Proxy s -> FiatPlayer -> ChannelMsg -> m ToClientMsg
   toClientMsg _ p (ChannelMsg echanMsg) = case decoded of
-      Left err -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error (ToClient.DecodeError (pack err)) :: ToClient.Msg cs cg mv)
-      Right (Left err) -> return $ decodeUtf8 $ toStrict $ encode (ToClient.Error err :: ToClient.Msg cs cg mv)
-      Right (Right s) -> decodeUtf8 . toStrict . encode . ToClient.Msg <$> toClientSettingsAndState p s
+      Left err -> return $ ToClientMsg . decodeUtf8 $ toStrict $ encode (ToClient.Error (ToClient.DecodeError (pack err)) :: ToClient.Msg cs cg mv)
+      Right (Left err) -> return $ ToClientMsg .decodeUtf8 $ toStrict $ encode (ToClient.Error err :: ToClient.Msg cs cg mv)
+      Right (Right s) -> ToClientMsg . decodeUtf8 . toStrict . encode . ToClient.Msg <$> toClientSettingsAndState p s
     where
       decoded :: Either String (Processed s g mv)
       decoded = eitherDecodeStrict echanMsg

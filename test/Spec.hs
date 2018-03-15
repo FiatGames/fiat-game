@@ -125,7 +125,7 @@ successResult s mgs = (ChannelMsg (toStrict (encode (Right (SettingsAndState s m
 
 goodProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 goodProcessToServer = process (FiatPlayer 0) initSettingsMsg (Just initialStateMsg) goodMove
-goodToClientMsg :: Identity Text
+goodToClientMsg :: Identity ToClientMsg
 goodToClientMsg = goodProcessToServer >>= toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 0)  . fst
 startGameProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 startGameProcessToServer = process System twoFiatPlayerSettingsMsg Nothing startGame
@@ -194,8 +194,8 @@ main = hspec $ do
       $ badSettings `shouldBe` Nothing
   describe "toClientMsg" $ do
     it "good - ToServer.MsgProcessed"
-      $ runIdentity goodToClientMsg `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg $ SettingsAndState initClientSettings $ Just $ GameState Playing (ClientNoGame False) Nothing :: NoGameClientMsg))
+      $ runIdentity goodToClientMsg `shouldBe` ToClientMsg (decodeUtf8 (toStrict $ encode (ToClient.Msg $ SettingsAndState initClientSettings $ Just $ GameState Playing (ClientNoGame False) Nothing :: NoGameClientMsg)))
     it "good - SettingsAndState s Nothing"
-      $ runIdentity ( toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1) foo) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings Nothing) :: NoGameClientMsg))
+      $ runIdentity ( toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1) foo) `shouldBe` ToClientMsg (decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings Nothing) :: NoGameClientMsg)))
     it "good - SettingsAndState s (Just gs)"
-      $ runIdentity ( toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1) foo2) `shouldBe` decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState)) :: NoGameClientMsg))
+      $ runIdentity ( toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1) foo2) `shouldBe` ToClientMsg (decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState)) :: NoGameClientMsg)))
