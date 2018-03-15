@@ -24,13 +24,14 @@ newtype FiatGameSettingsMsg = FiatGameSettingsMsg {getGameSettingsMsg :: Text}
 newtype FiatGameStateMsg = FiatGameStateMsg {getGameStateMsg :: Text}
   deriving (Eq,Show,Generic)
 
-newtype FiatToServertMsg = FiatToServertMsg {getToServerMsg :: Text}
+newtype FiatToServerMsg = FiatToServerMsg {getToServerMsg :: Text}
   deriving (Eq,Show,Generic)
 
 newtype FiatMoveSubmittedBy = FiatMoveSubmittedBy {getSubmittedBy :: FiatPlayer }
   deriving (Eq,Show,Generic)
 
 type FromFiat = (FiatGameSettingsMsg, Maybe FiatGameStateMsg)
+type Processed s g mv = Either ToClient.Error (SettingsAndState s g mv)
 
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSON cg, ToJSON s, FromJSON s, ToJSON cs, FromJSON cs) => FiatGame m g s mv cg cs | s -> mv, s -> g, s -> cg, s -> cs where
   defaultSettings :: m s
@@ -40,24 +41,25 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   isPlayersTurn :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   isMoveValid :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   toClientSettingsAndState :: FiatPlayer -> SettingsAndState s g mv -> m (SettingsAndState cs cg mv)
+
   isCmdAuthorized :: FiatMoveSubmittedBy -> SettingsAndState s g mv -> ToServer.Msg s mv -> m Bool
   isCmdAuthorized (FiatMoveSubmittedBy System) _  _ = return True
   isCmdAuthorized (FiatMoveSubmittedBy (FiatPlayer p1)) _ fc = case ToServer.player fc of
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
 
-  toSettingsAndState :: FromFiat -> m (Either ToClient.Error (SettingsAndState s g mv))
+  toSettingsAndState :: FromFiat -> m (Processed s g mv)
   toSettingsAndState (FiatGameSettingsMsg es,megs) = return $ over _Left ToClient.DecodeError $ SettingsAndState <$> es' <*> megs'
     where
       es' = over _Left pack <$> eitherDecodeStrict $ encodeUtf8 es
       megs' = fromMaybe (Right Nothing) $ over _Left pack <$> (eitherDecodeStrict . encodeUtf8 . getGameStateMsg <$> megs)
 
-  toClientMsg :: FiatPlayer -> Either ToClient.Error (SettingsAndState s g mv) -> m (ToClient.Msg cs cg mv)
+  toClientMsg :: FiatPlayer -> Processed s g mv -> m (ToClient.Msg cs cg mv)
   toClientMsg _ (Left err) = return $ ToClient.Error err
   toClientMsg p (Right s)  = ToClient.Msg <$> toClientSettingsAndState p s
 
-  processToServer :: FiatMoveSubmittedBy -> FromFiat -> FiatToServertMsg -> m (Either ToClient.Error (SettingsAndState s g mv))
-  processToServer submittedBy fromFiat (FiatToServertMsg ecmsg) = runExceptT $ do
+  processToServer :: FiatMoveSubmittedBy -> FromFiat -> FiatToServerMsg -> m (Processed s g mv)
+  processToServer submittedBy fromFiat (FiatToServerMsg ecmsg) = runExceptT $ do
     (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState fromFiat
     cmsg <- ExceptT $ return $ over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 ecmsg
     ExceptT $ boolToEither ToClient.Unauthorized <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg

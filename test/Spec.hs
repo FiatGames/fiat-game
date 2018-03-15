@@ -99,18 +99,18 @@ initialClientState  :: GameState ClientNoGame NoMoves
 initialClientState = GameState Playing (ClientNoGame True) Nothing
 initialStateMsg :: FiatGameStateMsg
 initialStateMsg = FiatGameStateMsg $ decodeUtf8 $ toStrict $ encode initialState
-systemMove :: FiatToServertMsg
-systemMove = FiatToServertMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.MakeMove ToB) :: NoGameToServerMsg)
-goodMove :: FiatToServertMsg
-goodMove = FiatToServertMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove ToB) :: NoGameToServerMsg)
-invalidMove :: FiatToServertMsg
-invalidMove = FiatToServertMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove ToA) :: NoGameToServerMsg)
-unauthorizedMove :: FiatToServertMsg
-unauthorizedMove = FiatToServertMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 1) (ToServer.MakeMove ToB) :: NoGameToServerMsg)
-startGame :: FiatToServertMsg
-startGame =  FiatToServertMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System ToServer.StartGame :: NoGameToServerMsg)
-updateSettings :: FiatToServertMsg
-updateSettings =  FiatToServertMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.UpdateSettings changedSettings) :: NoGameToServerMsg)
+systemMove :: FiatToServerMsg
+systemMove = FiatToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.MakeMove ToB) :: NoGameToServerMsg)
+goodMove :: FiatToServerMsg
+goodMove = FiatToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove ToB) :: NoGameToServerMsg)
+invalidMove :: FiatToServerMsg
+invalidMove = FiatToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove ToA) :: NoGameToServerMsg)
+unauthorizedMove :: FiatToServerMsg
+unauthorizedMove = FiatToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 1) (ToServer.MakeMove ToB) :: NoGameToServerMsg)
+startGame :: FiatToServerMsg
+startGame =  FiatToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System ToServer.StartGame :: NoGameToServerMsg)
+updateSettings :: FiatToServerMsg
+updateSettings =  FiatToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.UpdateSettings changedSettings) :: NoGameToServerMsg)
 
 goodProcessToServer :: NoGameFiatGameState
 goodProcessToServer = processToServer (FiatMoveSubmittedBy (FiatPlayer 0)) (initSettingsMsg, Just initialStateMsg) goodMove
@@ -143,7 +143,7 @@ main = hspec $ do
     it "game already started"
       $ runIdentity (processToServer (FiatMoveSubmittedBy System) (initSettingsMsg, Just initialStateMsg) startGame :: NoGameFiatGameState) `shouldBe` Left ToClient.GameAlreadyStarted
     it "decode error"
-      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 1)) (initSettingsMsg, Just $ FiatGameStateMsg "") (FiatToServertMsg "") :: NoGameFiatGameState) `shouldBe` Left (ToClient.DecodeError "Error in $: not enough input")
+      $ runIdentity (processToServer (FiatMoveSubmittedBy (FiatPlayer 1)) (initSettingsMsg, Just $ FiatGameStateMsg "") (FiatToServerMsg "") :: NoGameFiatGameState) `shouldBe` Left (ToClient.DecodeError "Error in $: not enough input")
   describe "addPlayer" $ do
     it "good"
       $ goodSettings `shouldBe` Just (NoSettings [FiatPlayer 1, FiatPlayer 0] False ())
