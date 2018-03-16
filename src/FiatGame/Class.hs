@@ -88,6 +88,9 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       decoded :: Either String (Processed s g mv)
       decoded = eitherDecodeStrict echanMsg
 
+  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ChannelMsg
+  gameStateIsOutOfDate _ p = return $ ChannelMsg $ toStrict $ encode (Left (p, ToClient.GameStateOutOfDate) :: Processed s g mv)
+
   processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
   processToServer _ submittedBy@(MoveSubmittedBy mvP) f (ToServerMsg ecmsg) = do
     (processed :: Processed s g mv) <- runExceptT $ do
