@@ -18,115 +18,66 @@ import           FiatGame.Class
 import           FiatGame.GameState
 import qualified FiatGame.ToClient.Types   as ToClient
 import qualified FiatGame.ToServer.Types   as ToServer
+import qualified NoGame                    as NoGame
 import           Test.Hspec
 
-data NoGame = NoGame
-  { turn     :: Bool
-  , gsSecret :: ()
-  }
-  deriving (Eq, Show)
-$(deriveJSON defaultOptions ''NoGame)
-data ClientNoGame = ClientNoGame
-  { cTurn     :: Bool
-  }
-  deriving (Eq, Show)
-$(deriveJSON defaultOptions ''ClientNoGame)
-data NoSettings = NoSettings
-  { players              :: [FiatPlayer]
-  , changeMe             :: Bool
-  , itsASecretToEveryone :: ()
-  }
-  deriving (Eq, Show)
-$(deriveJSON defaultOptions ''NoSettings)
-data ClientNoSettings = ClientNoSettings
-  { csFiatPlayers :: [FiatPlayer]
-  , csChangeMe    :: Bool
-  }
-  deriving (Eq, Show)
-$(deriveJSON defaultOptions ''ClientNoSettings)
-data NoMoves = ToA | ToB
-  deriving (Eq, Show)
-$(deriveJSON defaultOptions ''NoMoves)
 
-instance FiatGame Identity NoGame NoSettings NoMoves ClientNoGame ClientNoSettings where
-  defaultSettings = return initSettings
-  addPlayer p (NoSettings ps c ())
-    | length ps < 2 = return $ Just (NoSettings (p:ps) c ())
-    | otherwise = return Nothing
-  makeMove _ _ (GameState stage (NoGame True _) _) _ = return $ GameState stage (NoGame False ()) Nothing
-  makeMove _ _ (GameState stage (NoGame False _) _) _ = return $ GameState stage (NoGame True ()) Nothing
-  isMoveValid _ _ (GameState _ (NoGame True _) _) ToB  = return True
-  isMoveValid _ _ (GameState _ (NoGame False _) _) ToA = return True
-  isMoveValid _ _ _ _                                  = return False
-  isPlayersTurn (FiatPlayer 0) _ (GameState _ (NoGame True ()) _) _ = return True
-  isPlayersTurn (FiatPlayer 1) _ (GameState _ (NoGame False _) _) _ = return True
-  isPlayersTurn _ _ _ _                                         = return False
-  initialGameState (NoSettings ps c ())
-    | length ps < 2 = return $ Left "Not enough players"
-    | otherwise = return $ Right (NoSettings ps (not c) (), GameState Playing (NoGame True ()) Nothing)
-  toClientSettingsAndState _ (SettingsAndState (NoSettings ps c _) (Just (GameState stage (NoGame b ()) mvs))) = return (SettingsAndState (ClientNoSettings ps c) (Just (GameState stage (ClientNoGame b) mvs)))
-  toClientSettingsAndState _ (SettingsAndState  (NoSettings ps c _) Nothing) = return (SettingsAndState (ClientNoSettings ps c) Nothing)
+type NoGameToServerMsg = ToServer.Msg NoGame.Settings NoGame.Move
 
-type NoGameFiatGameState = Either ToClient.Error (SettingsAndState NoSettings NoGame NoMoves)
-type NoGameClientMsg = ToClient.Msg ClientNoSettings ClientNoGame NoMoves
-type NoGameToServerMsg = ToServer.Msg NoSettings NoMoves
-
-initSettings :: NoSettings
-initSettings = NoSettings [] False ()
-initClientSettings :: ClientNoSettings
-initClientSettings = ClientNoSettings [] False
+initClientSettings :: NoGame.ClientSettings
+initClientSettings = NoGame.ClientSettings [] False
 initSettingsMsg :: SettingsMsg
-initSettingsMsg = SettingsMsg $ decodeUtf8 $ toStrict $ encode initSettings
-changedSettings :: NoSettings
-changedSettings = NoSettings [] True ()
-twoFiatPlayersSettings :: NoSettings
-twoFiatPlayersSettings = NoSettings [FiatPlayer 0, FiatPlayer 1] False ()
+initSettingsMsg = SettingsMsg $ decodeUtf8 $ toStrict $ encode NoGame.initSettings
+changedSettings :: NoGame.Settings
+changedSettings = NoGame.Settings [] True ()
+twoFiatPlayersSettings :: NoGame.Settings
+twoFiatPlayersSettings = NoGame.Settings [FiatPlayer 0, FiatPlayer 1] False ()
 twoFiatPlayerSettingsMsg :: SettingsMsg
 twoFiatPlayerSettingsMsg = SettingsMsg $ decodeUtf8 $ toStrict $ encode twoFiatPlayersSettings
-twoFiatPlayersSettingsAfter :: NoSettings
-twoFiatPlayersSettingsAfter = NoSettings [FiatPlayer 0, FiatPlayer 1] True ()
+twoFiatPlayersSettingsAfter :: NoGame.Settings
+twoFiatPlayersSettingsAfter = NoGame.Settings [FiatPlayer 0, FiatPlayer 1] True ()
 
-goodSettings :: Maybe NoSettings
+goodSettings :: Maybe NoGame.Settings
 goodSettings = runIdentity $ do
   i <- defaultSettings
   runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1]
-badSettings :: Maybe NoSettings
+badSettings :: Maybe NoGame.Settings
 badSettings = runIdentity $ do
     i <- defaultSettings
     runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
 
-initialState  :: GameState NoGame NoMoves
-initialState = GameState Playing (NoGame True ()) Nothing
-initialClientState  :: GameState ClientNoGame NoMoves
-initialClientState = GameState Playing (ClientNoGame True) Nothing
+initialState  :: GameState NoGame.GameState NoGame.Move
+initialState = GameState Playing (NoGame.GameState True ()) Nothing
+initialClientState  :: GameState NoGame.ClientGameState NoGame.Move
+initialClientState = GameState Playing (NoGame.ClientGameState True) Nothing
 initialStateMsg :: GameStateMsg
 initialStateMsg = GameStateMsg $ decodeUtf8 $ toStrict $ encode initialState
 systemMove :: ToServerMsg
-systemMove = ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.MakeMove ToB) :: NoGameToServerMsg)
+systemMove = ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.MakeMove NoGame.ToB) :: NoGameToServerMsg)
 goodMove :: ToServerMsg
-goodMove = ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove ToB) :: NoGameToServerMsg)
+goodMove = ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove NoGame.ToB) :: NoGameToServerMsg)
 invalidMove :: ToServerMsg
-invalidMove = ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove ToA) :: NoGameToServerMsg)
+invalidMove = ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove NoGame.ToA) :: NoGameToServerMsg)
 unauthorizedMove :: ToServerMsg
-unauthorizedMove = ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 1) (ToServer.MakeMove ToB) :: NoGameToServerMsg)
+unauthorizedMove = ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg (FiatPlayer 1) (ToServer.MakeMove NoGame.ToB) :: NoGameToServerMsg)
 startGame :: ToServerMsg
 startGame =  ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System ToServer.StartGame :: NoGameToServerMsg)
 updateSettings :: ToServerMsg
 updateSettings =  ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.UpdateSettings changedSettings) :: NoGameToServerMsg)
 
 --Helper for all tests
-process :: FiatGame m NoGame NoSettings NoMoves ClientNoGame ClientNoSettings => FiatPlayer -> SettingsMsg -> Maybe GameStateMsg -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
-process p s mgs = processToServer (Proxy :: Proxy NoSettings) (MoveSubmittedBy p) (s, mgs)
+process :: FiatGame m NoGame.GameState NoGame.Settings NoGame.Move NoGame.ClientGameState NoGame.ClientSettings => FiatPlayer -> SettingsMsg -> Maybe GameStateMsg -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
+process p s mgs = processToServer (Proxy :: Proxy NoGame.Settings) (MoveSubmittedBy p) (s, mgs)
 
 --SUCESS
-successResult :: NoSettings -> Maybe (GameState NoGame NoMoves) -> (ChannelMsg, Maybe (GameStage,FromFiat))
-successResult s mgs = (ChannelMsg (toStrict (encode (Right (SettingsAndState s mgs) :: NoGameFiatGameState))), Just (stage, (SettingsMsg $ decodeUtf8 $ toStrict $ encode s, GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)))
+successResult :: NoGame.Settings -> Maybe (GameState NoGame.GameState NoGame.Move) -> (ChannelMsg, Maybe (GameStage,FromFiat))
+successResult s mgs = (ChannelMsg (toStrict (encode (Right (SettingsAndState s mgs) :: NoGame.Processed))), Just (stage, (SettingsMsg $ decodeUtf8 $ toStrict $ encode s, GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)))
   where stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
 
 goodProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 goodProcessToServer = process (FiatPlayer 0) initSettingsMsg (Just initialStateMsg) goodMove
 goodToClientMsg :: Identity ToClientMsg
-goodToClientMsg = goodProcessToServer >>= toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 0)  . fst
+goodToClientMsg = goodProcessToServer >>= toClientMsg (Proxy :: Proxy NoGame.Settings) (FiatPlayer 0)  . fst
 startGameProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 startGameProcessToServer = process System twoFiatPlayerSettingsMsg Nothing startGame
 updateSettingsProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
@@ -137,13 +88,13 @@ moveOnOthersBehalfProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,From
 moveOnOthersBehalfProcessToServer = process System initSettingsMsg (Just initialStateMsg) goodMove
 
 
-foo = ChannelMsg $ toStrict $ encode (Right (SettingsAndState initSettings Nothing) :: NoGameFiatGameState)
-foo2 = ChannelMsg $ toStrict $ encode (Right (SettingsAndState initSettings (Just initialState)) :: NoGameFiatGameState)
+foo = ChannelMsg $ toStrict $ encode (Right (SettingsAndState NoGame.initSettings Nothing) :: NoGame.Processed)
+foo2 = ChannelMsg $ toStrict $ encode (Right (SettingsAndState NoGame.initSettings (Just initialState)) ::  NoGame.Processed)
 
 
 --FAILURES
 failResult :: ToClient.Error -> (ChannelMsg, Maybe (GameStage,FromFiat))
-failResult err = (ChannelMsg (toStrict (encode (Left err :: NoGameFiatGameState))), Nothing)
+failResult err = (ChannelMsg (toStrict (encode (Left err ::  NoGame.Processed))), Nothing)
 
 failedToStartProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 failedToStartProcessToServer = process System initSettingsMsg Nothing startGame
@@ -164,15 +115,15 @@ main :: IO ()
 main = hspec $ do
   describe "processToServer" $ do
     it "good"
-      $ runIdentity goodProcessToServer `shouldBe` successResult initSettings (Just $ GameState Playing (NoGame False ()) Nothing)
+      $ runIdentity goodProcessToServer `shouldBe` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False ()) Nothing)
     it "start game"
-      $ runIdentity startGameProcessToServer `shouldBe` successResult twoFiatPlayersSettingsAfter (Just $ GameState Playing (NoGame True ()) Nothing)
+      $ runIdentity startGameProcessToServer `shouldBe` successResult twoFiatPlayersSettingsAfter (Just $ GameState Playing (NoGame.GameState True ()) Nothing)
     it "update settings"
       $ runIdentity updateSettingsProcessToServer `shouldBe` successResult changedSettings Nothing
     it "system allowed"
-      $ runIdentity systemAllowedProcessToServer `shouldBe` successResult initSettings (Just $ GameState Playing (NoGame False ()) Nothing)
+      $ runIdentity systemAllowedProcessToServer `shouldBe` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False ()) Nothing)
     it "system allowed to move on other's behalf"
-      $ runIdentity moveOnOthersBehalfProcessToServer `shouldBe` successResult initSettings (Just $ GameState Playing (NoGame False ()) Nothing)
+      $ runIdentity moveOnOthersBehalfProcessToServer `shouldBe` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False ()) Nothing)
     it "failed to start game"
       $ runIdentity failedToStartProcessToServer `shouldBe` failResult (ToClient.FailedToInitialize "Not enough players")
     it "unauthorized"
@@ -189,13 +140,13 @@ main = hspec $ do
       $ runIdentity decodeErrorProcessToServer `shouldBe` failResult (ToClient.DecodeError "Error in $: not enough input")
   describe "addFiatPlayer" $ do
     it "good"
-      $ goodSettings `shouldBe` Just (NoSettings [FiatPlayer 1, FiatPlayer 0] False ())
+      $ goodSettings `shouldBe` Just (NoGame.Settings [FiatPlayer 1, FiatPlayer 0] False ())
     it "game is full"
       $ badSettings `shouldBe` Nothing
   describe "toClientMsg" $ do
     it "good - ToServer.MsgProcessed"
-      $ runIdentity goodToClientMsg `shouldBe` ToClientMsg (decodeUtf8 (toStrict $ encode (ToClient.Msg $ SettingsAndState initClientSettings $ Just $ GameState Playing (ClientNoGame False) Nothing :: NoGameClientMsg)))
+      $ runIdentity goodToClientMsg `shouldBe` ToClientMsg (decodeUtf8 (toStrict $ encode (ToClient.Msg $ SettingsAndState initClientSettings $ Just $ GameState Playing (NoGame.ClientGameState False) Nothing :: NoGame.ClientMsg)))
     it "good - SettingsAndState s Nothing"
-      $ runIdentity ( toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1) foo) `shouldBe` ToClientMsg (decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings Nothing) :: NoGameClientMsg)))
+      $ runIdentity ( toClientMsg (Proxy :: Proxy NoGame.Settings) (FiatPlayer 1) foo) `shouldBe` ToClientMsg (decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings Nothing) :: NoGame.ClientMsg)))
     it "good - SettingsAndState s (Just gs)"
-      $ runIdentity ( toClientMsg (Proxy :: Proxy NoSettings) (FiatPlayer 1) foo2) `shouldBe` ToClientMsg (decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState)) :: NoGameClientMsg)))
+      $ runIdentity ( toClientMsg (Proxy :: Proxy NoGame.Settings) (FiatPlayer 1) foo2) `shouldBe` ToClientMsg (decodeUtf8 (toStrict $ encode (ToClient.Msg (SettingsAndState initClientSettings (Just initialClientState)) :: NoGame.ClientMsg)))
