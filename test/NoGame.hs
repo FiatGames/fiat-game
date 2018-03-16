@@ -9,7 +9,7 @@ module NoGame where
 import           Control.Monad.Identity
 import           Data.Aeson
 import           Data.Aeson.TH
-import           FiatGame.Class
+import           FiatGame.Class          as FiatGame
 import qualified FiatGame.GameState      as FiatGame
 import qualified FiatGame.ToClient.Types as ToClient
 
@@ -45,7 +45,7 @@ data Move = ToA | ToB
   deriving (Eq, Show)
 $(deriveJSON defaultOptions ''Move)
 
-type Processed = Either ToClient.Error (FiatGame.SettingsAndState Settings GameState Move)
+type Processed = FiatGame.Processed Settings GameState Move
 type ClientMsg = ToClient.Msg ClientSettings ClientGameState Move
 type State = FiatGame.GameState GameState Move
 

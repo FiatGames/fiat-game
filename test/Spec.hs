@@ -93,8 +93,8 @@ foo2 = ChannelMsg $ toStrict $ encode (Right (SettingsAndState NoGame.initSettin
 
 
 --FAILURES
-failResult :: ToClient.Error -> (ChannelMsg, Maybe (GameStage,FromFiat))
-failResult err = (ChannelMsg (toStrict (encode (Left err ::  NoGame.Processed))), Nothing)
+failResult :: FiatPlayer -> ToClient.Error -> (ChannelMsg, Maybe (GameStage,FromFiat))
+failResult p err = (ChannelMsg (toStrict (encode (Left (p,err) :: NoGame.Processed))), Nothing)
 
 failedToStartProcessToServer :: Identity (ChannelMsg, Maybe (GameStage,FromFiat))
 failedToStartProcessToServer = process System initSettingsMsg Nothing startGame
@@ -125,19 +125,19 @@ main = hspec $ do
     it "system allowed to move on other's behalf"
       $ runIdentity moveOnOthersBehalfProcessToServer `shouldBe` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False ()) Nothing)
     it "failed to start game"
-      $ runIdentity failedToStartProcessToServer `shouldBe` failResult (ToClient.FailedToInitialize "Not enough players")
+      $ runIdentity failedToStartProcessToServer `shouldBe` failResult System (ToClient.FailedToInitialize "Not enough players")
     it "unauthorized"
-      $ runIdentity unauthorizedProcessToServer `shouldBe` failResult ToClient.Unauthorized
+      $ runIdentity unauthorizedProcessToServer `shouldBe` failResult (FiatPlayer 0) ToClient.Unauthorized
     it "not your turn"
-      $ runIdentity notYourTurnProcessToServer `shouldBe` failResult ToClient.NotYourTurn
+      $ runIdentity notYourTurnProcessToServer `shouldBe` failResult (FiatPlayer 1) ToClient.NotYourTurn
     it "invalid"
-      $ runIdentity invalidProcessToServer `shouldBe` failResult ToClient.InvalidMove
+      $ runIdentity invalidProcessToServer `shouldBe` failResult (FiatPlayer 0) ToClient.InvalidMove
     it "game is not started"
-      $ runIdentity gameNotStartedProcessToServer `shouldBe` failResult ToClient.GameIsNotStarted
+      $ runIdentity gameNotStartedProcessToServer `shouldBe` failResult (FiatPlayer 0) ToClient.GameIsNotStarted
     it "game already started"
-      $ runIdentity gameAlreadyStartedProcessToServer `shouldBe` failResult ToClient.GameAlreadyStarted
+      $ runIdentity gameAlreadyStartedProcessToServer `shouldBe` failResult System ToClient.GameAlreadyStarted
     it "decode error"
-      $ runIdentity decodeErrorProcessToServer `shouldBe` failResult (ToClient.DecodeError "Error in $: not enough input")
+      $ runIdentity decodeErrorProcessToServer `shouldBe` failResult (FiatPlayer 1) (ToClient.DecodeError "Error in $: not enough input")
   describe "addFiatPlayer" $ do
     it "good"
       $ goodSettings `shouldBe` Just (NoGame.Settings [FiatPlayer 1, FiatPlayer 0] False ())

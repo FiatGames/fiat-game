@@ -19,7 +19,7 @@ data Error = GameIsNotStarted | GameAlreadyStarted | InvalidMove | Unauthorized 
 $(deriveJSON defaultOptions ''Error)
 
 data Msg s g mv
-  = Error Error
+  = Error FiatPlayer Error
   | Msg (SettingsAndState s g mv)
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''Msg)
