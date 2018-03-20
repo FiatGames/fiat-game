@@ -41,11 +41,12 @@ newtype FutureMoveMsg = FutureMoveMsg { getFutureMoveMsg :: Text }
 newtype MoveSubmittedBy = MoveSubmittedBy { getSubmittedBy :: FiatPlayer }
   deriving (Eq,Show,Generic)
 
-newtype ChannelMsg = ChannelMsg ByteString
+newtype ToChannelMsg = ToChannelMsg ByteString
   deriving (Eq,Show)
 
 type FromFiat = (SettingsMsg, Maybe GameStateMsg)
-type Processed s g mv = Either (FiatPlayer, ToClient.Error) (SettingsAndState s g mv)
+type ToChannel s g mv = Either (FiatPlayer, ToClient.Error) (SettingsAndState s g mv)
+type Processed = (ToChannelMsg, Maybe (GameStage,FromFiat,Maybe (UTCTime, FutureMoveMsg)))
 
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSON cg, ToJSON s, FromJSON s, ToJSON cs, FromJSON cs) => FiatGame m g s mv cg cs | s -> mv, s -> g, s -> cg, s -> cs where
   defaultSettings :: m s
@@ -62,56 +63,55 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
 
-  toSettingsAndState :: FiatPlayer -> FromFiat -> m (Processed s g mv)
-  toSettingsAndState p (SettingsMsg es,megs) = return $ over _Left (\e -> (p,ToClient.DecodeError e)) $ SettingsAndState <$> es' <*> megs'
+  toSettingsAndState :: FiatPlayer -> FromFiat -> m (ToChannel s g mv)
+  toSettingsAndState p (SettingsMsg es,megs) = return $ over _Left (\e -> (p,ToClient.DecodeError e)) $ SettingsAndState <$> eitherDecodeFromText es <*> megs'
     where
-      es' = over _Left pack <$> eitherDecodeStrict $ encodeUtf8 es
-      megs' = fromMaybe (Right Nothing) $ over _Left pack <$> (eitherDecodeStrict . encodeUtf8 . getGameStateMsg <$> megs)
+      megs' = fromMaybe (Right Nothing) (eitherDecodeFromText . getGameStateMsg <$> megs)
 
   initialFromFiat :: Proxy s -> FiatPlayer -> m SettingsMsg
   initialFromFiat _ p = do
     s :: s <- defaultSettings
     (Just s') <- addPlayer p s
-    return $ SettingsMsg $ decodeUtf8 $ toStrict $ encode s'
+    return $ SettingsMsg $ encodeToText s'
 
-  fromFiat :: Proxy s -> FiatPlayer -> FromFiat -> m ChannelMsg
-  fromFiat _ p f = ChannelMsg . toStrict . encode <$> (toSettingsAndState p f :: m (Processed s g mv))
+  fromFiat :: Proxy s -> FiatPlayer -> FromFiat -> m ToChannelMsg
+  fromFiat _ p f = ToChannelMsg . toStrict . encode <$> (toSettingsAndState p f :: m (ToChannel s g mv))
 
   tryAddPlayer :: Proxy s -> FiatPlayer -> SettingsMsg -> m (Maybe SettingsMsg)
   tryAddPlayer _ p (SettingsMsg es) = runMaybeT $ do
-    s :: s <- MaybeT $ return $ decodeStrict $ encodeUtf8 es
+    s :: s <- MaybeT $ return $ hush $ eitherDecodeFromText es
     added <- MaybeT $ addPlayer p s
-    return $ SettingsMsg $ decodeUtf8 $ toStrict $ encode added
+    return $ SettingsMsg $ encodeToText added
 
-  toClientMsg :: Proxy s -> FiatPlayer -> ChannelMsg -> m ToClientMsg
-  toClientMsg _ p (ChannelMsg echanMsg) = case decoded of
-      Left err -> return $ ToClientMsg . decodeUtf8 $ toStrict $ encode (ToClient.Error p (ToClient.DecodeError (pack err)) :: ToClient.Msg cs cg mv)
-      Right (Left err) -> return $ ToClientMsg .decodeUtf8 $ toStrict $ encode (uncurry ToClient.Error err :: ToClient.Msg cs cg mv)
-      Right (Right s) -> ToClientMsg . decodeUtf8 . toStrict . encode . ToClient.Msg <$> toClientSettingsAndState p s
+  toClientMsg :: Proxy s -> FiatPlayer -> ToChannelMsg -> m ToClientMsg
+  toClientMsg _ p (ToChannelMsg echanMsg) = case decoded of
+      Left err -> return $ ToClientMsg $ encodeToText (ToClient.Error p (ToClient.DecodeError (pack err)) :: ToClient.Msg cs cg mv)
+      Right (Left err) -> return $ ToClientMsg $ encodeToText (uncurry ToClient.Error err :: ToClient.Msg cs cg mv)
+      Right (Right s) -> ToClientMsg . encodeToText . ToClient.Msg <$> toClientSettingsAndState p s
     where
-      decoded :: Either String (Processed s g mv)
+      decoded :: Either String (ToChannel s g mv)
       decoded = eitherDecodeStrict echanMsg
 
-  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ChannelMsg
-  gameStateIsOutOfDate _ p = return $ ChannelMsg $ toStrict $ encode (Left (p, ToClient.GameStateOutOfDate) :: Processed s g mv)
+  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ToChannelMsg
+  gameStateIsOutOfDate _ p = return $ ToChannelMsg $ toStrict $ encode (Left (p, ToClient.GameStateOutOfDate) :: ToChannel s g mv)
 
-  proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe (UTCTime, FutureMoveMsg)))
+  proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m Processed
   proccessFutureMove p f (FutureMoveMsg emsg) = case msg of
-      Left err  -> return (ChannelMsg $ toStrict $ encode $ processed err,Nothing)
-      Right (FutureMove _ mv) -> processToServer p (MoveSubmittedBy System) f (ToServerMsg $ decodeUtf8 $ toStrict $ encode $ toServer mv)
+      Left err  -> return (ToChannelMsg $ toStrict $ encode $ processed err,Nothing)
+      Right (FutureMove _ mv) -> processToServer p (MoveSubmittedBy System) f (ToServerMsg $ encodeToText $ toServer mv)
     where
       toServer :: mv -> ToServer.Msg s mv
       toServer mv = ToServer.Msg System (ToServer.MakeMove mv)
-      processed :: ToClient.Error -> Processed s g mv
+      processed :: ToClient.Error -> ToChannel s g mv
       processed err = Left (System, err)
       msg :: Either ToClient.Error (FutureMove mv)
-      msg = over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 emsg
+      msg = over _Left ToClient.DecodeError $ eitherDecodeFromText emsg
 
-  processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe (UTCTime, FutureMoveMsg)))
+  processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m Processed
   processToServer _ submittedBy@(MoveSubmittedBy mvP) f (ToServerMsg ecmsg) = do
-    (processed :: Processed s g mv) <- runExceptT $ do
+    (toChannel :: ToChannel s g mv) <- runExceptT $ do
       (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState mvP f
-      cmsg <- ExceptT $ return $ over _Left (\err -> (mvP,ToClient.DecodeError $ pack err)) $ eitherDecodeStrict $ encodeUtf8 ecmsg
+      cmsg <- ExceptT $ return $ over _Left (\err -> (mvP,ToClient.DecodeError err)) $ eitherDecodeFromText ecmsg
       ExceptT $ boolToEither (mvP,ToClient.Unauthorized) <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg
       let p = ToServer.player cmsg
       case ToServer.cmd cmsg of
@@ -131,14 +131,23 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
             ExceptT $ boolToEither (mvP,ToClient.InvalidMove) <$> isMoveValid p s gs mv
             gs' <- lift $ makeMove p s gs mv
             return $ SettingsAndState s (Just gs')
-    let msg = ChannelMsg $ toStrict $ encode processed
-    case processed of
+    let msg = ToChannelMsg $ toStrict $ encode toChannel
+    case toChannel of
       Left _                      -> return (msg,Nothing)
       Right (SettingsAndState s mgs) -> do
         let stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
             fMv = fmap (\f -> (timeForFutureMove f, f)) (join (futureMove <$> mgs))
-        return (msg, Just (stage, (SettingsMsg (decodeUtf8 $ toStrict $ encode s), GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs), over _2 (FutureMoveMsg . decodeUtf8 . toStrict . encode) <$> fMv))
+        return (msg, Just (stage, (SettingsMsg (encodeToText s), GameStateMsg . encodeToText <$> mgs), over _2 (FutureMoveMsg . encodeToText) <$> fMv))
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
 boolToEither a False = Left a
+
+hush :: Either a b -> Maybe b
+hush (Left _)  = Nothing
+hush (Right b) = Just b
+
+encodeToText :: (ToJSON a) => a -> Text
+encodeToText = decodeUtf8 . toStrict . encode
+eitherDecodeFromText :: (FromJSON a) => Text -> Either Text a
+eitherDecodeFromText = over _Left pack . eitherDecodeStrict . encodeUtf8
