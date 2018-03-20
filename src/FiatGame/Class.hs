@@ -4,6 +4,7 @@
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
+{-# LANGUAGE TemplateHaskell        #-}
 
 module FiatGame.Class where
 
@@ -44,10 +45,28 @@ newtype MoveSubmittedBy = MoveSubmittedBy { getSubmittedBy :: FiatPlayer }
 newtype ToChannelMsg = ToChannelMsg ByteString
   deriving (Eq,Show)
 
-type FromFiat = (SettingsMsg, Maybe GameStateMsg)
-type ToChannel s g mv = Either (FiatPlayer, ToClient.Error) (SettingsAndState s g mv)
-type Processed = (ToChannelMsg, Maybe (GameStage,FromFiat,Maybe (UTCTime, FutureMoveMsg)))
+data FromFiat = FromFiat
+  { _fromFiatSettings  :: SettingsMsg
+  , _fromFiatGameState :: Maybe GameStateMsg
+  } deriving (Eq,Show,Generic)
+makeLenses ''FromFiat
 
+type ToChannel s g mv = Either (FiatPlayer, ToClient.Error) (SettingsAndState s g mv)
+
+data SuccessfulProcess = SuccessfulProcess
+  { _successfulProcessGameStage  :: GameStage
+  , _successfulProccessFromFiat  :: FromFiat
+  , _successfulProcessFutureMove :: Maybe (UTCTime,FutureMoveMsg)
+  }
+  deriving (Eq,Show,Generic)
+makeLenses ''SuccessfulProcess
+
+data Processed = Processed
+  { _processedToChannelMsg :: ToChannelMsg
+  , _processedSuccessFul   :: Maybe SuccessfulProcess
+  }
+  deriving (Eq,Show,Generic)
+makeLenses ''Processed
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSON cg, ToJSON s, FromJSON s, ToJSON cs, FromJSON cs) => FiatGame m g s mv cg cs | s -> mv, s -> g, s -> cg, s -> cs where
   defaultSettings :: m s
   addPlayer :: FiatPlayer -> s -> m (Maybe s)
@@ -64,9 +83,9 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     (FiatPlayer p2) -> return $ p1 == p2
 
   toSettingsAndState :: FiatPlayer -> FromFiat -> m (ToChannel s g mv)
-  toSettingsAndState p (SettingsMsg es,megs) = return $ over _Left (\e -> (p,ToClient.DecodeError e)) $ SettingsAndState <$> eitherDecodeFromText es <*> megs'
+  toSettingsAndState p ff = return $ over _Left (\e -> (p,ToClient.DecodeError e)) $ SettingsAndState <$> eitherDecodeFromText (getSettingsMsg $ ff^.fromFiatSettings) <*> megs'
     where
-      megs' = fromMaybe (Right Nothing) (eitherDecodeFromText . getGameStateMsg <$> megs)
+      megs' = fromMaybe (Right Nothing) (eitherDecodeFromText . getGameStateMsg <$> ff^.fromFiatGameState)
 
   initialFromFiat :: Proxy s -> FiatPlayer -> m SettingsMsg
   initialFromFiat _ p = do
@@ -97,7 +116,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
 
   proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m Processed
   proccessFutureMove p f (FutureMoveMsg emsg) = case msg of
-      Left err  -> return (ToChannelMsg $ toStrict $ encode $ processed err,Nothing)
+      Left err  -> return $ Processed (ToChannelMsg $ toStrict $ encode $ processed err) Nothing
       Right (FutureMove _ mv) -> processToServer p (MoveSubmittedBy System) f (ToServerMsg $ encodeToText $ toServer mv)
     where
       toServer :: mv -> ToServer.Msg s mv
@@ -108,9 +127,9 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       msg = over _Left ToClient.DecodeError $ eitherDecodeFromText emsg
 
   processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m Processed
-  processToServer _ submittedBy@(MoveSubmittedBy mvP) f (ToServerMsg ecmsg) = do
+  processToServer _ submittedBy@(MoveSubmittedBy mvP) fromFiat (ToServerMsg ecmsg) = do
     (toChannel :: ToChannel s g mv) <- runExceptT $ do
-      (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState mvP f
+      (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState mvP fromFiat
       cmsg <- ExceptT $ return $ over _Left (\err -> (mvP,ToClient.DecodeError err)) $ eitherDecodeFromText ecmsg
       ExceptT $ boolToEither (mvP,ToClient.Unauthorized) <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg
       let p = ToServer.player cmsg
@@ -133,11 +152,11 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
             return $ SettingsAndState s (Just gs')
     let msg = ToChannelMsg $ toStrict $ encode toChannel
     case toChannel of
-      Left _                      -> return (msg,Nothing)
+      Left _                      -> return $ Processed msg Nothing
       Right (SettingsAndState s mgs) -> do
         let stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
-            fMv = fmap (\f -> (timeForFutureMove f, f)) (join (futureMove <$> mgs))
-        return (msg, Just (stage, (SettingsMsg (encodeToText s), GameStateMsg . encodeToText <$> mgs), over _2 (FutureMoveMsg . encodeToText) <$> fMv))
+            fMv = fmap (\future -> (timeForFutureMove future, future)) (join (futureMove <$> mgs))
+        return $ Processed msg (Just $ SuccessfulProcess stage (FromFiat (SettingsMsg (encodeToText s)) (GameStateMsg . encodeToText <$> mgs)) (over _2 (FutureMoveMsg . encodeToText) <$> fMv))
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()

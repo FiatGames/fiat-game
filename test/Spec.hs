@@ -77,23 +77,25 @@ futureMoveBadMsg = FutureMoveMsg $ decodeUtf8 $ toStrict $ encode $ FutureMove d
 --SUCESS
 successResult :: NoGame.Settings -> Maybe (GameState NoGame.GameState NoGame.Move) -> Processed
 successResult s mgs
-  = (ToChannelMsg (toStrict (encode (Right (SettingsAndState s mgs) :: NoGame.ToChannel))), Just (stage, (SettingsMsg $ decodeUtf8 $ toStrict $ encode s, GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs), over _2 (FutureMoveMsg . decodeUtf8 . toStrict . encode) <$> fMv))
+  = Processed (ToChannelMsg (toStrict (encode (Right (SettingsAndState s mgs) :: NoGame.ToChannel)))) (Just successfulProcess)
   where
+    successfulProcess = SuccessfulProcess stage fromfiat (over _2 (FutureMoveMsg . decodeUtf8 . toStrict . encode) <$> fMv)
+    fromfiat = FromFiat (SettingsMsg $ decodeUtf8 $ toStrict $ encode s) (GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)
     fMv = fmap (\f -> (timeForFutureMove f, f)) (join (futureMove <$> mgs))
     stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
 
 goodProcessToServer :: Identity Processed
-goodProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (initSettingsMsg,Just initialStateMsg) goodMove
+goodProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg)) goodMove
 goodToClientMsg :: Identity ToClientMsg
-goodToClientMsg = goodProcessToServer >>= NoGame.toClientMsg (FiatPlayer 0)  . fst
+goodToClientMsg = goodProcessToServer >>= NoGame.toClientMsg (FiatPlayer 0)  . view processedToChannelMsg
 startGameProcessToServer :: Identity Processed
-startGameProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (twoFiatPlayerSettingsMsg,Nothing) startGame
+startGameProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat twoFiatPlayerSettingsMsg Nothing) startGame
 updateSettingsProcessToServer :: Identity Processed
-updateSettingsProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (initSettingsMsg, Nothing) updateSettings
+updateSettingsProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg Nothing) updateSettings
 systemAllowedProcessToServer :: Identity Processed
-systemAllowedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (initSettingsMsg, Just initialStateMsg) systemMove
+systemAllowedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg)) systemMove
 moveOnOthersBehalfProcessToServer :: Identity Processed
-moveOnOthersBehalfProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (initSettingsMsg, Just initialStateMsg) goodMove
+moveOnOthersBehalfProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg)) goodMove
 
 toClientMsgGoodNothing :: Identity ToClientMsg
 toClientMsgGoodNothing = NoGame.toClientMsg  (FiatPlayer 1) $ ToChannelMsg $ toStrict $ encode (Right (SettingsAndState NoGame.initSettings Nothing) :: NoGame.ToChannel)
@@ -101,31 +103,31 @@ toClientMsgGoodJust :: Identity ToClientMsg
 toClientMsgGoodJust = NoGame.toClientMsg (FiatPlayer 1) $ ToChannelMsg $ toStrict $ encode (Right (SettingsAndState NoGame.initSettings (Just initialState)) ::  NoGame.ToChannel)
 
 futureMoveGood :: Identity Processed
-futureMoveGood = NoGame.proccessFutureMove (initSettingsMsg,Just initialStateMsg) futureMoveGoodMsg
+futureMoveGood = NoGame.proccessFutureMove (FromFiat initSettingsMsg (Just initialStateMsg)) futureMoveGoodMsg
 
 --FAILURES
 failResult :: FiatPlayer -> ToClient.Error -> Processed
-failResult p err = (ToChannelMsg (toStrict (encode (Left (p,err) :: NoGame.ToChannel))), Nothing)
+failResult p err = Processed (ToChannelMsg (toStrict (encode (Left (p,err) :: NoGame.ToChannel)))) Nothing
 
 failedToStartProcessToServer :: Identity Processed
-failedToStartProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (initSettingsMsg, Nothing) startGame
+failedToStartProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg Nothing) startGame
 unauthorizedProcessToServer :: Identity Processed
-unauthorizedProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (initSettingsMsg, Just initialStateMsg) unauthorizedMove
+unauthorizedProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg)) unauthorizedMove
 notYourTurnProcessToServer :: Identity Processed
-notYourTurnProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 1)) (initSettingsMsg, Just initialStateMsg) unauthorizedMove
+notYourTurnProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 1)) (FromFiat initSettingsMsg (Just initialStateMsg)) unauthorizedMove
 invalidProcessToServer :: Identity Processed
-invalidProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (initSettingsMsg, Just initialStateMsg) invalidMove
+invalidProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg)) invalidMove
 gameNotStartedProcessToServer :: Identity Processed
-gameNotStartedProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (initSettingsMsg, Nothing) invalidMove
+gameNotStartedProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg Nothing) invalidMove
 gameAlreadyStartedProcessToServer :: Identity Processed
-gameAlreadyStartedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (initSettingsMsg, Just initialStateMsg) startGame
+gameAlreadyStartedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg)) startGame
 decodeErrorProcessToServer :: Identity Processed
-decodeErrorProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 1)) (initSettingsMsg, Just (GameStateMsg "")) (ToServerMsg "")
+decodeErrorProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 1)) (FromFiat initSettingsMsg (Just (GameStateMsg ""))) (ToServerMsg "")
 
 futureMoveInvalid :: Identity Processed
-futureMoveInvalid = NoGame.proccessFutureMove (initSettingsMsg,Just initialStateMsg) futureMoveBadMsg
+futureMoveInvalid = NoGame.proccessFutureMove (FromFiat initSettingsMsg (Just initialStateMsg)) futureMoveBadMsg
 futureMoveDecodeError :: Identity Processed
-futureMoveDecodeError = NoGame.proccessFutureMove (initSettingsMsg, Just (GameStateMsg "")) (FutureMoveMsg "")
+futureMoveDecodeError = NoGame.proccessFutureMove (FromFiat initSettingsMsg (Just (GameStateMsg ""))) (FutureMoveMsg "")
 
 main :: IO ()
 main = hspec $ do

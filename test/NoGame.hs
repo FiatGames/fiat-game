@@ -74,9 +74,9 @@ instance FiatGame Identity GameState Settings Move ClientGameState ClientSetting
   toClientSettingsAndState _ (FiatGame.SettingsAndState (Settings ps c _) (Just (FiatGame.GameState stage (GameState b ()) mvs))) = return (FiatGame.SettingsAndState (ClientSettings ps c) (Just (FiatGame.GameState stage (ClientGameState b) mvs)))
   toClientSettingsAndState _ (FiatGame.SettingsAndState (Settings ps c _) Nothing) = return (FiatGame.SettingsAndState (ClientSettings ps c) Nothing)
 
-proccessFutureMove :: FromFiat -> FutureMoveMsg -> Identity (ToChannelMsg, Maybe (FiatGame.GameStage,FromFiat,Maybe (UTCTime, FutureMoveMsg)))
+proccessFutureMove :: FromFiat -> FutureMoveMsg -> Identity Processed
 proccessFutureMove = FiatGame.proccessFutureMove (Proxy :: Proxy Settings)
-processToServer :: MoveSubmittedBy -> FromFiat -> ToServerMsg -> Identity (ToChannelMsg, Maybe (FiatGame.GameStage,FromFiat,Maybe (UTCTime, FutureMoveMsg)))
+processToServer :: MoveSubmittedBy -> FromFiat -> ToServerMsg -> Identity Processed
 processToServer = FiatGame.processToServer (Proxy :: Proxy Settings)
 toClientMsg :: FiatGame.FiatPlayer -> ToChannelMsg -> Identity ToClientMsg
 toClientMsg = FiatGame.toClientMsg (Proxy :: Proxy Settings)
