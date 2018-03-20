@@ -22,6 +22,9 @@ data FutureMove m = FutureMove UTCTime m
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''FutureMove)
 
+timeForFutureMove :: FutureMove m -> UTCTime
+timeForFutureMove (FutureMove t _) = t
+
 data GameStage = SettingUp | Playing | Done
   deriving (Show, Read, Eq, Generic)
 $(deriveJSON defaultOptions ''GameStage)

@@ -95,15 +95,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ChannelMsg
   gameStateIsOutOfDate _ p = return $ ChannelMsg $ toStrict $ encode (Left (p, ToClient.GameStateOutOfDate) :: Processed s g mv)
 
-  isTimeForFutureMove :: Proxy s -> UTCTime -> FutureMoveMsg -> m (Either Text Bool)
-  isTimeForFutureMove _ t (FutureMoveMsg emsg) = return $ isPastTime <$> msg
-    where
-      isPastTime :: FutureMove mv -> Bool
-      isPastTime (FutureMove t2 _) = t >= t2
-      msg :: Either Text (FutureMove mv)
-      msg = over _Left pack $ eitherDecodeStrict $ encodeUtf8 emsg
-
-  proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe FutureMoveMsg))
+  proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe (UTCTime, FutureMoveMsg)))
   proccessFutureMove p f (FutureMoveMsg emsg) = case msg of
       Left err  -> return (ChannelMsg $ toStrict $ encode $ processed err,Nothing)
       Right (FutureMove _ mv) -> processToServer p (MoveSubmittedBy System) f (ToServerMsg $ decodeUtf8 $ toStrict $ encode $ toServer mv)
@@ -115,7 +107,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       msg :: Either ToClient.Error (FutureMove mv)
       msg = over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 emsg
 
-  processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe FutureMoveMsg))
+  processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe (UTCTime, FutureMoveMsg)))
   processToServer _ submittedBy@(MoveSubmittedBy mvP) f (ToServerMsg ecmsg) = do
     (processed :: Processed s g mv) <- runExceptT $ do
       (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState mvP f
@@ -144,8 +136,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       Left _                      -> return (msg,Nothing)
       Right (SettingsAndState s mgs) -> do
         let stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
-            fMv = join $ futureMove <$> mgs
-        return (msg, Just (stage, (SettingsMsg (decodeUtf8 $ toStrict $ encode s), GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs), FutureMoveMsg . decodeUtf8 . toStrict . encode <$> fMv))
+            fMv = fmap (\f -> (timeForFutureMove f, f)) (join (futureMove <$> mgs))
+        return (msg, Just (stage, (SettingsMsg (decodeUtf8 $ toStrict $ encode s), GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs), over _2 (FutureMoveMsg . decodeUtf8 . toStrict . encode) <$> fMv))
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
