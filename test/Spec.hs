@@ -79,7 +79,7 @@ successResult :: NoGame.Settings -> Maybe (GameState NoGame.GameState NoGame.Mov
 successResult s mgs
   = Processed (ToChannelMsg (toStrict (encode (Right (SettingsAndState s mgs) :: NoGame.ToChannel)))) (Just successfulProcess)
   where
-    successfulProcess = SuccessfulProcess stage fromfiat (over _2 (FutureMoveMsg . decodeUtf8 . toStrict . encode) <$> fMv)
+    successfulProcess = SuccessfulProcessed stage fromfiat (over _2 (FutureMoveMsg . decodeUtf8 . toStrict . encode) <$> fMv)
     fromfiat = FromFiat (SettingsMsg $ decodeUtf8 $ toStrict $ encode s) (GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)
     fMv = fmap (\f -> (timeForFutureMove f, f)) (join (futureMove <$> mgs))
     stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
