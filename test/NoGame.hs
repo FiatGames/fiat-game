@@ -10,6 +10,8 @@ import           Control.Monad.Identity
 import           Data.Aeson
 import           Data.Aeson.TH
 import           Data.Proxy
+import           Data.Text               (Text)
+import           Data.Time.Clock
 import           FiatGame.Class          as FiatGame
 import qualified FiatGame.GameState      as FiatGame
 import qualified FiatGame.ToClient.Types as ToClient
@@ -78,3 +80,5 @@ processToServer :: MoveSubmittedBy -> FromFiat -> ToServerMsg -> Identity (Chann
 processToServer = FiatGame.processToServer (Proxy :: Proxy Settings)
 toClientMsg :: FiatGame.FiatPlayer -> ChannelMsg -> Identity ToClientMsg
 toClientMsg = FiatGame.toClientMsg (Proxy :: Proxy Settings)
+isTimeForFutureMove :: UTCTime -> FutureMoveMsg -> Identity (Either Text Bool)
+isTimeForFutureMove = FiatGame.isTimeForFutureMove (Proxy :: Proxy Settings)

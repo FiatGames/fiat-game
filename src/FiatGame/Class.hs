@@ -17,6 +17,7 @@ import           Data.Maybe
 import           Data.Proxy
 import           Data.Text                 (Text, pack)
 import           Data.Text.Encoding
+import           Data.Time.Clock
 import           FiatGame.GameState
 import qualified FiatGame.ToClient.Types   as ToClient
 import qualified FiatGame.ToServer.Types   as ToServer
@@ -93,6 +94,14 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
 
   gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ChannelMsg
   gameStateIsOutOfDate _ p = return $ ChannelMsg $ toStrict $ encode (Left (p, ToClient.GameStateOutOfDate) :: Processed s g mv)
+
+  isTimeForFutureMove :: Proxy s -> UTCTime -> FutureMoveMsg -> m (Either Text Bool)
+  isTimeForFutureMove _ t (FutureMoveMsg emsg) = return $ isPastTime <$> msg
+    where
+      isPastTime :: FutureMove mv -> Bool
+      isPastTime (FutureMove t2 _) = t >= t2
+      msg :: Either Text (FutureMove mv)
+      msg = over _Left pack $ eitherDecodeStrict $ encodeUtf8 emsg
 
   proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe FutureMoveMsg))
   proccessFutureMove p f (FutureMoveMsg emsg) = case msg of

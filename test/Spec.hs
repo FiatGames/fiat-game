@@ -10,6 +10,7 @@ import           Control.Monad.Identity
 import           Control.Monad.Trans.Maybe
 import           Data.Aeson
 import           Data.ByteString.Lazy      (toStrict)
+import           Data.Text                 (Text)
 import           Data.Text.Encoding
 import           Data.Time.Calendar
 import           Data.Time.Clock
@@ -63,12 +64,16 @@ startGame =  ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System T
 updateSettings :: ToServerMsg
 updateSettings =  ToServerMsg $ decodeUtf8 $ toStrict $ encode (ToServer.Msg System (ToServer.UpdateSettings changedSettings) :: NoGameToServerMsg)
 
-fakeDay :: UTCTime
-fakeDay = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
+day0 :: UTCTime
+day0 = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
+day1 :: UTCTime
+day1 = UTCTime (ModifiedJulianDay 1) (secondsToDiffTime 0)
+
 futureMoveGoodMsg :: FutureMoveMsg
-futureMoveGoodMsg = FutureMoveMsg $ decodeUtf8 $ toStrict $ encode $ FutureMove fakeDay NoGame.ToB
+futureMoveGoodMsg = FutureMoveMsg $ decodeUtf8 $ toStrict $ encode $ FutureMove day0 NoGame.ToB
 futureMoveBadMsg :: FutureMoveMsg
-futureMoveBadMsg = FutureMoveMsg $ decodeUtf8 $ toStrict $ encode $ FutureMove fakeDay NoGame.ToA
+futureMoveBadMsg = FutureMoveMsg $ decodeUtf8 $ toStrict $ encode $ FutureMove day0 NoGame.ToA
+
 
 --SUCESS
 successResult :: NoGame.Settings -> Maybe (GameState NoGame.GameState NoGame.Move) -> (ChannelMsg, Maybe (GameStage,FromFiat,Maybe FutureMoveMsg))
@@ -98,6 +103,11 @@ toClientMsgGoodJust = NoGame.toClientMsg (FiatPlayer 1) $ ChannelMsg $ toStrict 
 
 futureMoveGood :: Identity (ChannelMsg, Maybe (GameStage,FromFiat,Maybe FutureMoveMsg))
 futureMoveGood = NoGame.proccessFutureMove (initSettingsMsg,Just initialStateMsg) futureMoveGoodMsg
+
+timeForFutureMove :: Identity (Either Text Bool)
+timeForFutureMove = NoGame.isTimeForFutureMove day1 $ FutureMoveMsg $ decodeUtf8 $ toStrict $ encode $ FutureMove day0 NoGame.ToB
+notTimeForFutureMove :: Identity (Either Text Bool)
+notTimeForFutureMove = NoGame.isTimeForFutureMove day0 $ FutureMoveMsg $ decodeUtf8 $ toStrict $ encode $ FutureMove day1 NoGame.ToB
 
 --FAILURES
 failResult :: FiatPlayer -> ToClient.Error -> (ChannelMsg, Maybe (GameStage,FromFiat,Maybe FutureMoveMsg))
@@ -169,3 +179,8 @@ main = hspec $ do
        $ runIdentity futureMoveInvalid `shouldBe` failResult System ToClient.InvalidMove
       it "decode error"
        $ runIdentity futureMoveDecodeError `shouldBe` failResult System (ToClient.DecodeError "Error in $: not enough input")
+  describe "isTimeForFutureMove" $ do
+    it "true"
+       $ runIdentity timeForFutureMove `shouldBe` Right True
+    it "false"
+       $ runIdentity notTimeForFutureMove `shouldBe` Right False
