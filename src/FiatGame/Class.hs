@@ -54,9 +54,9 @@ makeLenses ''FromFiat
 type ToChannel s g mv = Either (FiatPlayer, ToClient.Error) (SettingsAndState s g mv)
 
 data SuccessfulProcessed = SuccessfulProcessed
-  { _successfulProcessGameStage  :: GameStage
-  , _successfulProccessFromFiat  :: FromFiat
-  , _successfulProcessFutureMove :: Maybe (UTCTime,FutureMoveMsg)
+  { _successfulProcessedGameStage  :: GameStage
+  , _successfulProccessedFromFiat  :: FromFiat
+  , _successfulProcessedFutureMove :: Maybe (UTCTime,FutureMoveMsg)
   }
   deriving (Eq,Show,Generic)
 makeLenses ''SuccessfulProcessed
