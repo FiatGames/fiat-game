@@ -5,7 +5,7 @@
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
 
-module FiatGame.Class (FiatGame(..), SettingsMsg(..), GameStateMsg(..), ToServerMsg(..), MoveSubmittedBy(..), ChannelMsg(..), ToClientMsg(..), FromFiat, Processed) where
+module FiatGame.Class where
 
 import           Control.Lens
 import           Control.Monad.Except
@@ -32,6 +32,9 @@ newtype ToServerMsg = ToServerMsg { getToServerMsg :: Text }
   deriving (Eq,Show,Generic)
 
 newtype ToClientMsg = ToClientMsg { getToClientMsg :: Text }
+  deriving (Eq,Show,Generic)
+
+newtype FutureMoveMsg = FutureMoveMsg { getFutureMoveMsg :: Text }
   deriving (Eq,Show,Generic)
 
 newtype MoveSubmittedBy = MoveSubmittedBy { getSubmittedBy :: FiatPlayer }
@@ -91,7 +94,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ChannelMsg
   gameStateIsOutOfDate _ p = return $ ChannelMsg $ toStrict $ encode (Left (p, ToClient.GameStateOutOfDate) :: Processed s g mv)
 
-  processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat))
+  processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe FutureMoveMsg))
   processToServer _ submittedBy@(MoveSubmittedBy mvP) f (ToServerMsg ecmsg) = do
     (processed :: Processed s g mv) <- runExceptT $ do
       (SettingsAndState s mgs) <- ExceptT $ toSettingsAndState mvP f
@@ -120,7 +123,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       Left _                      -> return (msg,Nothing)
       Right (SettingsAndState s mgs) -> do
         let stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
-        return (msg, Just (stage, (SettingsMsg (decodeUtf8 $ toStrict $ encode s), GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs)))
+            fMv = join $ futureMove <$> mgs
+        return (msg, Just (stage, (SettingsMsg (decodeUtf8 $ toStrict $ encode s), GameStateMsg . decodeUtf8 . toStrict . encode <$> mgs), FutureMoveMsg . decodeUtf8 . toStrict . encode <$> fMv))
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()
