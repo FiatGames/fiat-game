@@ -94,6 +94,18 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ChannelMsg
   gameStateIsOutOfDate _ p = return $ ChannelMsg $ toStrict $ encode (Left (p, ToClient.GameStateOutOfDate) :: Processed s g mv)
 
+  proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe FutureMoveMsg))
+  proccessFutureMove p f (FutureMoveMsg emsg) = case msg of
+      Left err  -> return (ChannelMsg $ toStrict $ encode $ processed err,Nothing)
+      Right (FutureMove _ mv) -> processToServer p (MoveSubmittedBy System) f (ToServerMsg $ decodeUtf8 $ toStrict $ encode $ toServer mv)
+    where
+      toServer :: mv -> ToServer.Msg s mv
+      toServer mv = ToServer.Msg System (ToServer.MakeMove mv)
+      processed :: ToClient.Error -> Processed s g mv
+      processed err = Left (System, err)
+      msg :: Either ToClient.Error (FutureMove mv)
+      msg = over _Left (ToClient.DecodeError . pack) $ eitherDecodeStrict $ encodeUtf8 emsg
+
   processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m (ChannelMsg, Maybe (GameStage,FromFiat,Maybe FutureMoveMsg))
   processToServer _ submittedBy@(MoveSubmittedBy mvP) f (ToServerMsg ecmsg) = do
     (processed :: Processed s g mv) <- runExceptT $ do

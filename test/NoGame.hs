@@ -9,6 +9,7 @@ module NoGame where
 import           Control.Monad.Identity
 import           Data.Aeson
 import           Data.Aeson.TH
+import           Data.Proxy
 import           FiatGame.Class          as FiatGame
 import qualified FiatGame.GameState      as FiatGame
 import qualified FiatGame.ToClient.Types as ToClient
@@ -70,3 +71,10 @@ instance FiatGame Identity GameState Settings Move ClientGameState ClientSetting
     | otherwise = return $ Right (Settings ps (not c) (), FiatGame.GameState FiatGame.Playing (GameState True ()) Nothing)
   toClientSettingsAndState _ (FiatGame.SettingsAndState (Settings ps c _) (Just (FiatGame.GameState stage (GameState b ()) mvs))) = return (FiatGame.SettingsAndState (ClientSettings ps c) (Just (FiatGame.GameState stage (ClientGameState b) mvs)))
   toClientSettingsAndState _ (FiatGame.SettingsAndState (Settings ps c _) Nothing) = return (FiatGame.SettingsAndState (ClientSettings ps c) Nothing)
+
+proccessFutureMove :: FromFiat -> FutureMoveMsg -> Identity (ChannelMsg, Maybe (FiatGame.GameStage,FromFiat,Maybe FutureMoveMsg))
+proccessFutureMove = FiatGame.proccessFutureMove (Proxy :: Proxy Settings)
+processToServer :: MoveSubmittedBy -> FromFiat -> ToServerMsg -> Identity (ChannelMsg, Maybe (FiatGame.GameStage,FromFiat,Maybe FutureMoveMsg))
+processToServer = FiatGame.processToServer (Proxy :: Proxy Settings)
+toClientMsg :: FiatGame.FiatPlayer -> ChannelMsg -> Identity ToClientMsg
+toClientMsg = FiatGame.toClientMsg (Proxy :: Proxy Settings)
