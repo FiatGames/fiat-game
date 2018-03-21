@@ -156,7 +156,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       h' <- lift $ newHash (Proxy :: Proxy s)
       let p = ToServer.player cmsg
       if h /= ToServer.hash cmsg
-      then ExceptT $ return $ Left (mvP,ToClient.GameAlreadyStarted)
+      then ExceptT $ return $ Left (mvP,ToClient.GameStateOutOfDate)
       else case ToServer.cmd cmsg of
         ToServer.StartGame                -> case mgs of
           (Just _) -> ExceptT $ return $ Left (mvP,ToClient.GameAlreadyStarted)
