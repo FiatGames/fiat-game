@@ -105,8 +105,13 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       tcmsg :: Either Text (ToClient.Msg s g mv)
       tcmsg = eitherDecodeFromText etcmsg
 
-  fromFiat :: FiatPlayer -> FromFiat -> m (ToClient.Msg s g mv)
-  fromFiat p ff = return $ mkMsg $ SettingsAndState <$> es <*> megs
+  fromFiat :: Proxy s -> FiatPlayer -> FromFiat -> m ToFiatMsg
+  fromFiat _ p ff =  do
+    (msg :: ToClient.Msg s g mv) <- fromFiatToMsg p ff
+    return $ ToFiatMsg $ encodeToText msg
+
+  fromFiatToMsg :: FiatPlayer -> FromFiat -> m (ToClient.Msg s g mv)
+  fromFiatToMsg p ff = return $ mkMsg $ SettingsAndState <$> es <*> megs
     where
       mkMsg (Left err) = ToClient.Error p $ ToClient.DecodeError err
       mkMsg (Right s)  = ToClient.Msg (ff^.fromFiatGameHash) s
@@ -125,8 +130,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     added <- MaybeT $ addPlayer p s
     return $ SettingsMsg $ encodeToText added
 
-  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ToClientMsg
-  gameStateIsOutOfDate _ p = return $ ToClientMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg cs cg mv)
+  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ToFiatMsg
+  gameStateIsOutOfDate _ p = return $ ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s g mv)
 
   proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m Processed
   proccessFutureMove p f (FutureMoveMsg emsg) = case msg of
@@ -145,7 +150,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m Processed
   processToServer _ submittedBy@(MoveSubmittedBy mvP) fiat (ToServerMsg ecmsg) = do
     (toChannel ::  Either (FiatPlayer,ToClient.Error) (FiatGameHash, SettingsAndState s g mv)) <- runExceptT $ do
-      (h, SettingsAndState s mgs) <- ExceptT $ ToClient.fromMsg <$> fromFiat mvP fiat
+      (h, SettingsAndState s mgs) <- ExceptT $ ToClient.fromMsg <$> fromFiatToMsg mvP fiat
       cmsg <- ExceptT $ return $ over _Left (\err -> (mvP,ToClient.DecodeError err)) $ eitherDecodeFromText ecmsg
       ExceptT $ boolToEither (mvP,ToClient.Unauthorized) <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg
       h' <- lift $ newHash s
