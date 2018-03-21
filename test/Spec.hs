@@ -77,7 +77,7 @@ futureMoveBadMsg = FutureMoveMsg $ encodeToText $ FutureMove (FiatGameHash "abc"
 --SUCESS
 successResult :: NoGame.Settings -> Maybe (GameState NoGame.GameState NoGame.Move) -> Processed
 successResult s mgs
-  = Processed (ToChannelMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState s mgs) :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move))) (Just successfulProcess)
+  = Processed (ToFiatMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState s mgs) :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move))) (Just successfulProcess)
   where
     successfulProcess = SuccessfulProcessed stage fromfiat (over _2 (FutureMoveMsg . encodeToText) <$> fMv)
     fromfiat = FromFiat (SettingsMsg $ encodeToText s) (GameStateMsg . encodeToText <$> mgs) (FiatGameHash "abc")
@@ -101,13 +101,13 @@ futureMoveGood :: Identity Processed
 futureMoveGood = NoGame.proccessFutureMove (FromFiat initSettingsMsg (Just initialStateMsg)(FiatGameHash "abc")) futureMoveGoodMsg
 
 toClientMsgGoodNothing :: Identity ToClientMsg
-toClientMsgGoodNothing = NoGame.toClientMsg  (FiatPlayer 1) $ ToChannelMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState NoGame.initSettings Nothing) :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move )
+toClientMsgGoodNothing = NoGame.toClientMsg  (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState NoGame.initSettings Nothing) :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move )
 toClientMsgGoodJust :: Identity ToClientMsg
-toClientMsgGoodJust = NoGame.toClientMsg (FiatPlayer 1) $ ToChannelMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState NoGame.initSettings (Just initialState)) ::  ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move)
+toClientMsgGoodJust = NoGame.toClientMsg (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState NoGame.initSettings (Just initialState)) ::  ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move)
 
 --FAILURES
 failResult :: FiatPlayer -> ToClient.Error -> Processed
-failResult p err = Processed (ToChannelMsg $ encodeToText (ToClient.Error p err :: NoGame.ClientMsg)) Nothing
+failResult p err = Processed (ToFiatMsg $ encodeToText (ToClient.Error p err :: NoGame.ClientMsg)) Nothing
 
 failedToStartProcessToServer :: Identity Processed
 failedToStartProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg Nothing (FiatGameHash "abc")) startGame

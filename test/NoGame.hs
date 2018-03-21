@@ -78,5 +78,5 @@ proccessFutureMove :: FromFiat -> FutureMoveMsg -> Identity Processed
 proccessFutureMove = FiatGame.proccessFutureMove (Proxy :: Proxy Settings)
 processToServer :: MoveSubmittedBy -> FromFiat -> ToServerMsg -> Identity Processed
 processToServer = FiatGame.processToServer (Proxy :: Proxy Settings)
-toClientMsg :: FiatGame.FiatPlayer -> ToChannelMsg -> Identity ToClientMsg
+toClientMsg :: FiatGame.FiatPlayer -> ToFiatMsg -> Identity ToClientMsg
 toClientMsg = FiatGame.toClientMsg (Proxy :: Proxy Settings)

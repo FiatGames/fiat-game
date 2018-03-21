@@ -38,9 +38,9 @@ newtype ToServerMsg = ToServerMsg { getToServerMsg :: Text }
   deriving (Eq,Show,Generic)
 makeWrapped ''ToServerMsg
 
-newtype ToChannelMsg = ToChannelMsg { getToChannelMsg :: Text }
+newtype ToFiatMsg = ToFiatMsg { getToFiatMsg :: Text }
   deriving (Eq,Show,Generic)
-makeWrapped ''ToChannelMsg
+makeWrapped ''ToFiatMsg
 
 newtype ToClientMsg = ToClientMsg { getToClientMsg :: Text }
   deriving (Eq,Show,Generic)
@@ -72,7 +72,7 @@ data SuccessfulProcessed = SuccessfulProcessed
 makeLenses ''SuccessfulProcessed
 
 data Processed = Processed
-  { _processedToClientMsg :: ToChannelMsg
+  { _processedToClientMsg :: ToFiatMsg
   , _processedSuccessFul  :: Maybe SuccessfulProcessed
   }
   deriving (Eq,Show,Generic)
@@ -94,8 +94,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
 
-  toClientMsg :: Proxy s -> FiatPlayer -> ToChannelMsg -> m ToClientMsg
-  toClientMsg _ p (ToChannelMsg etcmsg) = case tcmsg of
+  toClientMsg :: Proxy s -> FiatPlayer -> ToFiatMsg -> m ToClientMsg
+  toClientMsg _ p (ToFiatMsg etcmsg) = case tcmsg of
     Left err  -> return $ ToClientMsg $ encodeToText (ToClient.Error p $ ToClient.DecodeError err :: ToClient.Msg cs cg mv)
     Right e@(ToClient.Error _ _) -> return $ ToClientMsg $ encodeToText e
     Right (ToClient.Msg h s) -> do
@@ -126,13 +126,13 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     return $ SettingsMsg $ encodeToText added
 
   gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ToClientMsg
-  gameStateIsOutOfDate _ p = return $ ToClientMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s g mv)
+  gameStateIsOutOfDate _ p = return $ ToClientMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg cs cg mv)
 
   proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m Processed
   proccessFutureMove p f (FutureMoveMsg emsg) = case msg of
-      Left err  -> return $ Processed (ToChannelMsg $ encodeToText $ mkErr err) Nothing
+      Left err  -> return $ Processed (ToFiatMsg $ encodeToText $ mkErr err) Nothing
       Right fmv -> case eitherDecodeFromText (f^.fromFiatSettings._Wrapped') of
-        Left err -> return $ Processed (ToChannelMsg $ encodeToText $ mkErr err) Nothing
+        Left err -> return $ Processed (ToFiatMsg $ encodeToText $ mkErr err) Nothing
         Right (_ :: s) -> processToServer p (MoveSubmittedBy System) f (ToServerMsg $ encodeToText $ toServer fmv)
     where
       toServer :: FutureMove mv -> ToServer.Msg s mv
@@ -169,7 +169,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
             ExceptT $ boolToEither (mvP,ToClient.InvalidMove) <$> isMoveValid p s gs mv
             gs' <- lift $ makeMove p s gs mv
             return (h',SettingsAndState s (Just gs'))
-    let msg = ToChannelMsg $ encodeToText $ ToClient.toMsg toChannel
+    let msg = ToFiatMsg $ encodeToText $ ToClient.toMsg toChannel
     case toChannel of
       Left _                      -> return $ Processed msg Nothing
       Right (h',SettingsAndState s mgs) -> do
