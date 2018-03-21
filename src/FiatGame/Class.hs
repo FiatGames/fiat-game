@@ -86,7 +86,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   isPlayersTurn :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   isMoveValid :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
   toClientSettingsAndState :: FiatPlayer -> SettingsAndState s g mv -> m (SettingsAndState cs cg mv)
-  newHash :: s -> m FiatGameHash
+  newHash :: Proxy s -> m FiatGameHash
 
   isCmdAuthorized :: MoveSubmittedBy -> SettingsAndState s g mv -> ToServer.Msg s mv -> m Bool
   isCmdAuthorized (MoveSubmittedBy System) _  _ = return True
@@ -153,7 +153,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       (h, SettingsAndState s mgs) <- ExceptT $ ToClient.fromMsg <$> fromFiatToMsg mvP fiat
       cmsg <- ExceptT $ return $ over _Left (\err -> (mvP,ToClient.DecodeError err)) $ eitherDecodeFromText ecmsg
       ExceptT $ boolToEither (mvP,ToClient.Unauthorized) <$> isCmdAuthorized submittedBy (SettingsAndState s mgs) cmsg
-      h' <- lift $ newHash s
+      h' <- lift $ newHash (Proxy :: Proxy s)
       let p = ToServer.player cmsg
       if h /= ToServer.hash cmsg
       then ExceptT $ return $ Left (mvP,ToClient.GameAlreadyStarted)
