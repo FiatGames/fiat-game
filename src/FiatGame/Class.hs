@@ -126,8 +126,8 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     added <- MaybeT $ addPlayer p s
     return $ SettingsMsg $ encodeToText added
 
-  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ToFiatMsg
-  gameStateIsOutOfDate _ p = return $ ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s g mv)
+  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m Processed
+  gameStateIsOutOfDate _ p = return $ Processed (ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s g mv)) Nothing
 
   processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m Processed
   processToServer _ submittedBy@(MoveSubmittedBy mvP) fiat (ToServerMsg ecmsg) = do
