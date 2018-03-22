@@ -46,10 +46,6 @@ newtype ToClientMsg = ToClientMsg { getToClientMsg :: Text }
   deriving (Eq,Show,Generic)
 makeWrapped ''ToClientMsg
 
-newtype FutureMoveMsg = FutureMoveMsg { getFutureMoveMsg :: Text }
-  deriving (Eq,Show,Generic)
-makeWrapped ''FutureMoveMsg
-
 newtype MoveSubmittedBy = MoveSubmittedBy { getSubmittedBy :: FiatPlayer }
   deriving (Eq,Show,Generic)
 makeWrapped ''MoveSubmittedBy
@@ -66,7 +62,7 @@ makeLenses ''FromFiat
 data SuccessfulProcessed = SuccessfulProcessed
   { _successfulProcessedGameStage  :: GameStage
   , _successfulProccessedFromFiat  :: FromFiat
-  , _successfulProcessedFutureMove :: Maybe (UTCTime,FutureMoveMsg)
+  , _successfulProcessedFutureMove :: Maybe (UTCTime, ToServerMsg)
   }
   deriving (Eq,Show,Generic)
 makeLenses ''SuccessfulProcessed
@@ -133,20 +129,6 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
   gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m ToFiatMsg
   gameStateIsOutOfDate _ p = return $ ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s g mv)
 
-  proccessFutureMove :: Proxy s -> FromFiat -> FutureMoveMsg -> m Processed
-  proccessFutureMove p f (FutureMoveMsg emsg) = case msg of
-      Left err  -> return $ Processed (ToFiatMsg $ encodeToText $ mkErr err) Nothing
-      Right fmv -> case eitherDecodeFromText (f^.fromFiatSettings._Wrapped') of
-        Left err -> return $ Processed (ToFiatMsg $ encodeToText $ mkErr err) Nothing
-        Right (_ :: s) -> processToServer p (MoveSubmittedBy System) f (ToServerMsg $ encodeToText $ toServer fmv)
-    where
-      toServer :: FutureMove mv -> ToServer.Msg s mv
-      toServer fmv = ToServer.Msg System (ToServer.MakeMove (fmv^.futureMoveMove)) (fmv^.futureMoveHash)
-      mkErr :: Text -> ToClient.Msg s g mv
-      mkErr =  ToClient.Error System . ToClient.DecodeError
-      msg :: Either Text (FutureMove mv)
-      msg = eitherDecodeFromText emsg
-
   processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m Processed
   processToServer _ submittedBy@(MoveSubmittedBy mvP) fiat (ToServerMsg ecmsg) = do
     (toChannel ::  Either (FiatPlayer,ToClient.Error) (FiatGameHash, SettingsAndState s g mv)) <- runExceptT $ do
@@ -179,8 +161,9 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       Left _                      -> return $ Processed msg Nothing
       Right (h',SettingsAndState s mgs) -> do
         let stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
-            fMv = fmap (\f -> (f^.futureMoveTime, f)) (join (futureMove <$> mgs))
-        return $ Processed msg (Just $ SuccessfulProcessed stage (FromFiat (SettingsMsg (encodeToText s)) (GameStateMsg . encodeToText <$> mgs) h') (over _2 (FutureMoveMsg . encodeToText) <$> fMv))
+            fMv :: Maybe (UTCTime, ToServer.Msg s mv)
+            fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) h')) (join (futureMove <$> mgs))
+        return $ Processed msg (Just $ SuccessfulProcessed stage (FromFiat (SettingsMsg (encodeToText s)) (GameStateMsg . encodeToText <$> mgs) h') (over _2 (ToServerMsg . encodeToText) <$> fMv))
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()

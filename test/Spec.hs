@@ -68,20 +68,16 @@ updateSettings =  ToServerMsg $ encodeToText (ToServer.Msg System (ToServer.Upda
 day0 :: UTCTime
 day0 = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
 
-futureMoveGoodMsg :: FutureMoveMsg
-futureMoveGoodMsg = FutureMoveMsg $ encodeToText $ FutureMove (FiatGameHash "abc") day0 NoGame.ToB
-futureMoveBadMsg :: FutureMoveMsg
-futureMoveBadMsg = FutureMoveMsg $ encodeToText $ FutureMove (FiatGameHash "abc") day0 NoGame.ToA
-
 
 --SUCESS
 successResult :: NoGame.Settings -> Maybe (GameState NoGame.GameState NoGame.Move) -> Processed
 successResult s mgs
   = Processed (ToFiatMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState s mgs) :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move))) (Just successfulProcess)
   where
-    successfulProcess = SuccessfulProcessed stage fromfiat (over _2 (FutureMoveMsg . encodeToText) <$> fMv)
+    successfulProcess = SuccessfulProcessed stage fromfiat (over _2 (ToServerMsg . encodeToText) <$> fMv)
     fromfiat = FromFiat (SettingsMsg $ encodeToText s) (GameStateMsg . encodeToText <$> mgs) (FiatGameHash "abc")
-    fMv = fmap (\f -> (f^.futureMoveTime, f)) (join (futureMove <$> mgs))
+    fMv :: Maybe (UTCTime, ToServer.Msg NoGame.Settings NoGame.Move)
+    fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) (FiatGameHash "abc"))) (join (futureMove <$> mgs))
     stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
 
 goodProcessToServer :: Identity Processed
@@ -96,9 +92,6 @@ systemAllowedProcessToServer :: Identity Processed
 systemAllowedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) systemMove
 moveOnOthersBehalfProcessToServer :: Identity Processed
 moveOnOthersBehalfProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) goodMove
-
-futureMoveGood :: Identity Processed
-futureMoveGood = NoGame.proccessFutureMove (FromFiat initSettingsMsg (Just initialStateMsg)(FiatGameHash "abc")) futureMoveGoodMsg
 
 toClientMsgGoodNothing :: Identity ToClientMsg
 toClientMsgGoodNothing = NoGame.toClientMsg  (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState NoGame.initSettings Nothing) :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move )
@@ -123,11 +116,6 @@ gameAlreadyStartedProcessToServer :: Identity Processed
 gameAlreadyStartedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) startGame
 decodeErrorProcessToServer :: Identity Processed
 decodeErrorProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 1)) (FromFiat initSettingsMsg (Just (GameStateMsg "")) (FiatGameHash "abc")) (ToServerMsg "")
-
-futureMoveInvalid :: Identity Processed
-futureMoveInvalid = NoGame.proccessFutureMove (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) futureMoveBadMsg
-futureMoveDecodeError :: Identity Processed
-futureMoveDecodeError = NoGame.proccessFutureMove (FromFiat initSettingsMsg (Just (GameStateMsg "")) (FiatGameHash "abc")) (FutureMoveMsg "")
 
 main :: IO ()
 main = hspec $ do
@@ -168,10 +156,3 @@ main = hspec $ do
       $ runIdentity toClientMsgGoodNothing `shouldBe` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState initClientSettings Nothing) :: NoGame.ClientMsg))
     it "good - SettingsAndState s (Just gs)"
       $ runIdentity toClientMsgGoodJust `shouldBe` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState initClientSettings (Just initialClientState)) :: NoGame.ClientMsg))
-  describe "processFutureMove" $ do
-      it "good"
-       $ runIdentity futureMoveGood `shouldBe` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False ()) Nothing)
-      it "invalid"
-       $ runIdentity futureMoveInvalid `shouldBe` failResult System ToClient.InvalidMove
-      it "decode error"
-       $ runIdentity futureMoveDecodeError `shouldBe` failResult System (ToClient.DecodeError "Error in $: not enough input")

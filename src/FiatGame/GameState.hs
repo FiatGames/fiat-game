@@ -28,8 +28,7 @@ $(deriveJSON defaultOptions ''FiatGameHash)
 makeWrapped ''FiatGameHash
 
 data FutureMove m = FutureMove
-  { _futureMoveHash :: FiatGameHash
-  , _futureMoveTime :: UTCTime
+  { _futureMoveTime :: UTCTime
   , _futureMoveMove :: m
   }
   deriving (Eq,Show,Generic)

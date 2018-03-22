@@ -74,8 +74,6 @@ instance FiatGame Identity GameState Settings Move ClientGameState ClientSetting
   toClientSettingsAndState _ (FiatGame.SettingsAndState (Settings ps c _) Nothing) = return (FiatGame.SettingsAndState (ClientSettings ps c) Nothing)
   newHash _ = return $ FiatGame.FiatGameHash "abc"
 
-proccessFutureMove :: FromFiat -> FutureMoveMsg -> Identity Processed
-proccessFutureMove = FiatGame.proccessFutureMove (Proxy :: Proxy Settings)
 processToServer :: MoveSubmittedBy -> FromFiat -> ToServerMsg -> Identity Processed
 processToServer = FiatGame.processToServer (Proxy :: Proxy Settings)
 toClientMsg :: FiatGame.FiatPlayer -> ToFiatMsg -> Identity ToClientMsg
