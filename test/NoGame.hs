@@ -13,8 +13,8 @@ import           Data.Proxy
 import           Data.Text               (Text)
 import           Data.Time.Clock
 import           FiatGame.Class          as FiatGame
-import qualified FiatGame.GameState      as FiatGame
 import qualified FiatGame.ToClient.Types as ToClient
+import qualified FiatGame.Types          as FiatGame
 
 data GameState = GameState
   { turn     :: Bool
@@ -74,7 +74,7 @@ instance FiatGame Identity GameState Settings Move ClientGameState ClientSetting
   toClientSettingsAndState _ (FiatGame.SettingsAndState (Settings ps c _) Nothing) = return (FiatGame.SettingsAndState (ClientSettings ps c) Nothing)
   newHash _ = return $ FiatGame.FiatGameHash "abc"
 
-processToServer :: MoveSubmittedBy -> FromFiat -> ToServerMsg -> Identity Processed
+processToServer :: FiatGame.MoveSubmittedBy -> FiatGame.FromFiat -> FiatGame.ToServerMsg -> Identity FiatGame.Processed
 processToServer = FiatGame.processToServer (Proxy :: Proxy Settings)
-toClientMsg :: FiatGame.FiatPlayer -> ToFiatMsg -> Identity ToClientMsg
+toClientMsg :: FiatGame.FiatPlayer -> FiatGame.ToFiatMsg -> Identity FiatGame.ToClientMsg
 toClientMsg = FiatGame.toClientMsg (Proxy :: Proxy Settings)

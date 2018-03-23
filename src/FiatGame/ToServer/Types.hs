@@ -8,10 +8,9 @@
 
 module FiatGame.ToServer.Types where
 
-import           Data.Aeson         hiding (Error)
+import           Data.Aeson     hiding (Error)
 import           Data.Aeson.TH
-import           Data.Text          (Text)
-import           FiatGame.GameState
+import           FiatGame.Types
 import           GHC.Generics
 
 data Cmd s mv = StartGame | UpdateSettings s | MakeMove mv

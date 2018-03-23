@@ -1,11 +1,9 @@
-{-# LANGUAGE DeriveGeneric          #-}
 {-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
 {-# LANGUAGE LambdaCase             #-}
 {-# LANGUAGE MultiParamTypeClasses  #-}
 {-# LANGUAGE OverloadedStrings      #-}
 {-# LANGUAGE ScopedTypeVariables    #-}
-{-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeFamilies           #-}
 
 module FiatGame.Class where
@@ -14,65 +12,15 @@ import           Control.Lens
 import           Control.Monad.Except
 import           Control.Monad.Trans.Maybe
 import           Data.Aeson
-import           Data.ByteString           (ByteString)
 import           Data.ByteString.Lazy      (toStrict)
 import           Data.Maybe
 import           Data.Proxy
 import           Data.Text                 (Text, pack)
 import           Data.Text.Encoding
 import           Data.Time.Clock
-import           FiatGame.GameState
 import qualified FiatGame.ToClient.Types   as ToClient
 import qualified FiatGame.ToServer.Types   as ToServer
-import           GHC.Generics              hiding (from)
-
-newtype SettingsMsg = SettingsMsg { getSettingsMsg :: Text }
-  deriving (Eq,Show,Generic)
-makeWrapped ''SettingsMsg
-
-newtype GameStateMsg = GameStateMsg { getGameStateMsg :: Text }
-  deriving (Eq,Show,Generic)
-makeWrapped ''GameStateMsg
-
-newtype ToServerMsg = ToServerMsg { getToServerMsg :: Text }
-  deriving (Eq,Show,Generic)
-makeWrapped ''ToServerMsg
-
-newtype ToFiatMsg = ToFiatMsg { getToFiatMsg :: Text }
-  deriving (Eq,Show,Generic)
-makeWrapped ''ToFiatMsg
-
-newtype ToClientMsg = ToClientMsg { getToClientMsg :: Text }
-  deriving (Eq,Show,Generic)
-makeWrapped ''ToClientMsg
-
-newtype MoveSubmittedBy = MoveSubmittedBy { getSubmittedBy :: FiatPlayer }
-  deriving (Eq,Show,Generic)
-makeWrapped ''MoveSubmittedBy
-
-data FromFiat = FromFiat
-  { _fromFiatSettings  :: SettingsMsg
-  , _fromFiatGameState :: Maybe GameStateMsg
-  , _fromFiatGameHash  :: FiatGameHash
-  } deriving (Eq,Show,Generic)
-makeLenses ''FromFiat
-
---type ToChannel s g mv = Either (FiatPlayer, ToClient.Error) (SettingsAndState s g mv)
-
-data SuccessfulProcessed = SuccessfulProcessed
-  { _successfulProcessedGameStage  :: GameStage
-  , _successfulProccessedFromFiat  :: FromFiat
-  , _successfulProcessedFutureMove :: Maybe (UTCTime, ToServerMsg)
-  }
-  deriving (Eq,Show,Generic)
-makeLenses ''SuccessfulProcessed
-
-data Processed = Processed
-  { _processedToClientMsg :: ToFiatMsg
-  , _processedSuccessFul  :: Maybe SuccessfulProcessed
-  }
-  deriving (Eq,Show,Generic)
-makeLenses ''Processed
+import           FiatGame.Types
 
 class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSON cg, ToJSON s, FromJSON s, ToJSON cs, FromJSON cs) => FiatGame m g s mv cg cs | s -> mv, s -> g, s -> cg, s -> cs where
   defaultSettings :: m s
@@ -160,7 +108,7 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
     case toChannel of
       Left _                      -> return $ Processed msg Nothing
       Right (h',SettingsAndState s mgs) -> do
-        let stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
+        let stage = maybe SettingUp (\(FiatGame.Types.GameState st _ _) -> st) mgs
             fMv :: Maybe (UTCTime, ToServer.Msg s mv)
             fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) h')) (join (futureMove <$> mgs))
         return $ Processed msg (Just $ SuccessfulProcessed stage (FromFiat (SettingsMsg (encodeToText s)) (GameStateMsg . encodeToText <$> mgs) h') (over _2 (ToServerMsg . encodeToText) <$> fMv))

@@ -8,7 +8,7 @@
 {-# LANGUAGE TemplateHaskell        #-}
 {-# LANGUAGE TypeFamilies           #-}
 
-module FiatGame.GameState where
+module FiatGame.Types where
 
 import           Control.Lens.TH
 import           Data.Aeson
@@ -49,3 +49,49 @@ futureMove (GameState _ _ m) = m
 data SettingsAndState s g m = SettingsAndState s (Maybe (GameState g m))
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''SettingsAndState)
+
+newtype SettingsMsg = SettingsMsg { getSettingsMsg :: Text }
+  deriving (Eq,Show,Generic)
+makeWrapped ''SettingsMsg
+
+newtype GameStateMsg = GameStateMsg { getGameStateMsg :: Text }
+  deriving (Eq,Show,Generic)
+makeWrapped ''GameStateMsg
+
+newtype ToServerMsg = ToServerMsg { getToServerMsg :: Text }
+  deriving (Eq,Show,Generic)
+makeWrapped ''ToServerMsg
+
+newtype ToFiatMsg = ToFiatMsg { getToFiatMsg :: Text }
+  deriving (Eq,Show,Generic)
+makeWrapped ''ToFiatMsg
+
+newtype ToClientMsg = ToClientMsg { getToClientMsg :: Text }
+  deriving (Eq,Show,Generic)
+makeWrapped ''ToClientMsg
+
+newtype MoveSubmittedBy = MoveSubmittedBy { getSubmittedBy :: FiatPlayer }
+  deriving (Eq,Show,Generic)
+makeWrapped ''MoveSubmittedBy
+
+data FromFiat = FromFiat
+  { _fromFiatSettings  :: SettingsMsg
+  , _fromFiatGameState :: Maybe GameStateMsg
+  , _fromFiatGameHash  :: FiatGameHash
+  } deriving (Eq,Show,Generic)
+makeLenses ''FromFiat
+
+data SuccessfulProcessed = SuccessfulProcessed
+  { _successfulProcessedGameStage  :: GameStage
+  , _successfulProccessedFromFiat  :: FromFiat
+  , _successfulProcessedFutureMove :: Maybe (UTCTime, ToServerMsg)
+  }
+  deriving (Eq,Show,Generic)
+makeLenses ''SuccessfulProcessed
+
+data Processed = Processed
+  { _processedToClientMsg :: ToFiatMsg
+  , _processedSuccessFul  :: Maybe SuccessfulProcessed
+  }
+  deriving (Eq,Show,Generic)
+makeLenses ''Processed

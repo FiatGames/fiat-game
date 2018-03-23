@@ -16,9 +16,9 @@ import           Data.Text.Encoding
 import           Data.Time.Calendar
 import           Data.Time.Clock
 import           FiatGame.Class
-import           FiatGame.GameState
 import qualified FiatGame.ToClient.Types   as ToClient
 import qualified FiatGame.ToServer.Types   as ToServer
+import           FiatGame.Types
 import qualified NoGame                    as NoGame
 import           Test.Hspec
 
@@ -78,7 +78,7 @@ successResult s mgs
     fromfiat = FromFiat (SettingsMsg $ encodeToText s) (GameStateMsg . encodeToText <$> mgs) (FiatGameHash "abc")
     fMv :: Maybe (UTCTime, ToServer.Msg NoGame.Settings NoGame.Move)
     fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) (FiatGameHash "abc"))) (join (futureMove <$> mgs))
-    stage = maybe SettingUp (\(FiatGame.GameState.GameState st _ _) -> st) mgs
+    stage = maybe SettingUp (\(FiatGame.Types.GameState st _ _) -> st) mgs
 
 goodProcessToServer :: Identity Processed
 goodProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) goodMove
