@@ -54,7 +54,7 @@ type State = FiatGame.GameState GameState Move
 initSettings :: Settings
 initSettings = Settings [] False ()
 
-instance FiatGame Identity GameState Settings Move ClientGameState ClientSettings where
+instance FiatGame GameState Settings Move ClientGameState ClientSettings where
   defaultSettings = return initSettings
   addPlayer p (Settings ps c ())
     | length ps < 2 = return $ Just (Settings (p:ps) c ())
@@ -74,7 +74,7 @@ instance FiatGame Identity GameState Settings Move ClientGameState ClientSetting
   toClientSettingsAndState _ (FiatGame.SettingsAndState (Settings ps c _) Nothing) = return (FiatGame.SettingsAndState (ClientSettings ps c) Nothing)
   newHash _ = return $ FiatGame.FiatGameHash "abc"
 
-processToServer :: FiatGame.MoveSubmittedBy -> FiatGame.FromFiat -> FiatGame.ToServerMsg -> Identity FiatGame.Processed
+processToServer :: FiatGame.MoveSubmittedBy -> FiatGame.FromFiat -> FiatGame.ToServerMsg -> IO FiatGame.Processed
 processToServer = FiatGame.processToServer (Proxy :: Proxy Settings)
-toClientMsg :: FiatGame.FiatPlayer -> FiatGame.ToFiatMsg -> Identity FiatGame.ToClientMsg
+toClientMsg :: FiatGame.FiatPlayer -> FiatGame.ToFiatMsg -> IO FiatGame.ToClientMsg
 toClientMsg = FiatGame.toClientMsg (Proxy :: Proxy Settings)

@@ -22,23 +22,23 @@ import qualified FiatGame.ToClient.Types   as ToClient
 import qualified FiatGame.ToServer.Types   as ToServer
 import           FiatGame.Types
 
-class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSON cg, ToJSON s, FromJSON s, ToJSON cs, FromJSON cs) => FiatGame m g s mv cg cs | s -> mv, s -> g, s -> cg, s -> cs where
-  defaultSettings :: m s
-  addPlayer :: FiatPlayer -> s -> m (Maybe s)
-  initialGameState :: s -> m (Either Text (s, GameState g mv))
-  makeMove :: FiatPlayer -> s -> GameState g mv -> mv -> m (GameState g mv)
-  isPlayersTurn :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
-  isMoveValid :: FiatPlayer -> s -> GameState g mv -> mv -> m Bool
-  toClientSettingsAndState :: FiatPlayer -> SettingsAndState s g mv -> m (SettingsAndState cs cg mv)
-  newHash :: Proxy s -> m FiatGameHash
+class (ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSON cg, ToJSON s, FromJSON s, ToJSON cs, FromJSON cs) => FiatGame g s mv cg cs | s -> mv, s -> g, s -> cg, s -> cs where
+  defaultSettings :: IO s
+  addPlayer :: FiatPlayer -> s -> IO (Maybe s)
+  initialGameState :: s -> IO (Either Text (s, GameState g mv))
+  makeMove :: FiatPlayer -> s -> GameState g mv -> mv -> IO (GameState g mv)
+  isPlayersTurn :: FiatPlayer -> s -> GameState g mv -> mv -> IO Bool
+  isMoveValid :: FiatPlayer -> s -> GameState g mv -> mv -> IO Bool
+  toClientSettingsAndState :: FiatPlayer -> SettingsAndState s g mv -> IO (SettingsAndState cs cg mv)
+  newHash :: Proxy s -> IO FiatGameHash
 
-  isCmdAuthorized :: MoveSubmittedBy -> SettingsAndState s g mv -> ToServer.Msg s mv -> m Bool
+  isCmdAuthorized :: MoveSubmittedBy -> SettingsAndState s g mv -> ToServer.Msg s mv -> IO Bool
   isCmdAuthorized (MoveSubmittedBy System) _  _ = return True
   isCmdAuthorized (MoveSubmittedBy (FiatPlayer p1)) _ fc = case ToServer.player fc of
     System          -> return False
     (FiatPlayer p2) -> return $ p1 == p2
 
-  toClientMsg :: Proxy s -> FiatPlayer -> ToFiatMsg -> m ToClientMsg
+  toClientMsg :: Proxy s -> FiatPlayer -> ToFiatMsg -> IO ToClientMsg
   toClientMsg _ p (ToFiatMsg etcmsg) = case tcmsg of
     Left err  -> return $ ToClientMsg $ encodeToText (ToClient.Error p $ ToClient.DecodeError err :: ToClient.Msg cs cg mv)
     Right e@(ToClient.Error _ _) -> return $ ToClientMsg $ encodeToText e
@@ -49,12 +49,12 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       tcmsg :: Either Text (ToClient.Msg s g mv)
       tcmsg = eitherDecodeFromText etcmsg
 
-  fromFiat :: Proxy s -> FiatPlayer -> FromFiat -> m ToFiatMsg
+  fromFiat :: Proxy s -> FiatPlayer -> FromFiat -> IO ToFiatMsg
   fromFiat _ p ff =  do
     (msg :: ToClient.Msg s g mv) <- fromFiatToMsg p ff
     return $ ToFiatMsg $ encodeToText msg
 
-  fromFiatToMsg :: FiatPlayer -> FromFiat -> m (ToClient.Msg s g mv)
+  fromFiatToMsg :: FiatPlayer -> FromFiat -> IO (ToClient.Msg s g mv)
   fromFiatToMsg p ff = return $ mkMsg $ SettingsAndState <$> es <*> megs
     where
       mkMsg (Left err) = ToClient.Error p $ ToClient.DecodeError err
@@ -62,22 +62,22 @@ class (Monad m, ToJSON mv, FromJSON mv, ToJSON g, FromJSON g, ToJSON cg, FromJSO
       es = eitherDecodeFromText $ ff^.fromFiatSettings._Wrapped'
       megs = fromMaybe (Right Nothing) $ eitherDecodeFromText <$> ff^?fromFiatGameState._Just._Wrapped'
 
-  initialFromFiat :: Proxy s -> FiatPlayer -> m SettingsMsg
+  initialFromFiat :: Proxy s -> FiatPlayer -> IO SettingsMsg
   initialFromFiat _ p = do
     s :: s <- defaultSettings
     (Just s') <- addPlayer p s
     return $ SettingsMsg $ encodeToText s'
 
-  tryAddPlayer :: Proxy s -> FiatPlayer -> SettingsMsg -> m (Maybe SettingsMsg)
+  tryAddPlayer :: Proxy s -> FiatPlayer -> SettingsMsg -> IO (Maybe SettingsMsg)
   tryAddPlayer _ p (SettingsMsg es) = runMaybeT $ do
     s :: s <- MaybeT $ return $ hush $ eitherDecodeFromText es
     added <- MaybeT $ addPlayer p s
     return $ SettingsMsg $ encodeToText added
 
-  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> m Processed
+  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> IO Processed
   gameStateIsOutOfDate _ p = return $ Processed (ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s g mv)) Nothing
 
-  processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m Processed
+  processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> IO Processed
   processToServer _ submittedBy@(MoveSubmittedBy mvP) fiat (ToServerMsg ecmsg) = do
     (toChannel ::  Either (FiatPlayer,ToClient.Error) (FiatGameHash, SettingsAndState s g mv)) <- runExceptT $ do
       (h, SettingsAndState s mgs) <- ExceptT $ ToClient.fromMsg <$> fromFiatToMsg mvP fiat
