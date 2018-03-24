@@ -77,11 +77,12 @@ class
       es = eitherDecodeFromText $ ff^.fromFiatSettings._Wrapped'
       megs = fromMaybe (Right Nothing) $ eitherDecodeFromText <$> ff^?fromFiatGameState._Just._Wrapped'
 
-  initialFromFiat :: Proxy s -> FiatPlayer -> IO SettingsMsg
+  initialFromFiat :: Proxy s -> FiatPlayer -> IO (FiatGameHash, SettingsMsg)
   initialFromFiat _ p = do
     s :: s <- defaultSettings
     (Just s') <- addPlayer p s
-    return $ SettingsMsg $ encodeToText s'
+    h <- newHash s' Nothing
+    return (h, SettingsMsg $ encodeToText s')
 
   tryAddPlayer :: Proxy s -> FiatPlayer -> SettingsMsg -> IO (Maybe SettingsMsg)
   tryAddPlayer _ p (SettingsMsg es) = runMaybeT $ do
