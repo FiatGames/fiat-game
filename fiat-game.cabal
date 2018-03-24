@@ -28,6 +28,7 @@ library
                      , time
                      , mtl
                      , transformers
+                     , uuid
   default-language:    Haskell2010
                      
 test-suite fiat-game-test

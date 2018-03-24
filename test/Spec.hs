@@ -11,7 +11,9 @@ import           Control.Monad.Identity
 import           Control.Monad.Trans.Maybe
 import           Data.Aeson
 import           Data.ByteString.Lazy      (toStrict)
+import           Data.Maybe
 import           Data.Text                 (Text)
+import qualified Data.Text                 as T
 import           Data.Text.Encoding
 import           Data.Time.Calendar
 import           Data.Time.Clock
@@ -47,23 +49,23 @@ badSettings = do
     runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
 
 initialState  :: GameState NoGame.GameState NoGame.Move
-initialState = GameState Playing (NoGame.GameState True ()) Nothing
+initialState = GameState Playing (NoGame.GameState True () 0) Nothing
 initialClientState  :: GameState NoGame.ClientGameState NoGame.Move
 initialClientState = GameState Playing (NoGame.ClientGameState True) Nothing
 initialStateMsg :: GameStateMsg
 initialStateMsg = GameStateMsg $ encodeToText initialState
 systemMove :: ToServerMsg
-systemMove = ToServerMsg $ encodeToText (ToServer.Msg System (ToServer.MakeMove NoGame.ToB) (FiatGameHash "abc") :: NoGameToServerMsg)
+systemMove = ToServerMsg $ encodeToText (ToServer.Msg System (ToServer.MakeMove NoGame.ToB) (FiatGameHash "") :: NoGameToServerMsg)
 goodMove :: ToServerMsg
-goodMove = ToServerMsg $ encodeToText (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove NoGame.ToB) (FiatGameHash "abc") :: NoGameToServerMsg)
+goodMove = ToServerMsg $ encodeToText (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove NoGame.ToB) (FiatGameHash "0") :: NoGameToServerMsg)
 invalidMove :: ToServerMsg
-invalidMove = ToServerMsg $ encodeToText (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove NoGame.ToA) (FiatGameHash "abc") :: NoGameToServerMsg)
+invalidMove = ToServerMsg $ encodeToText (ToServer.Msg (FiatPlayer 0) (ToServer.MakeMove NoGame.ToA) (FiatGameHash "0") :: NoGameToServerMsg)
 unauthorizedMove :: ToServerMsg
-unauthorizedMove = ToServerMsg $ encodeToText (ToServer.Msg (FiatPlayer 1) (ToServer.MakeMove NoGame.ToB) (FiatGameHash "abc") :: NoGameToServerMsg)
+unauthorizedMove = ToServerMsg $ encodeToText (ToServer.Msg (FiatPlayer 1) (ToServer.MakeMove NoGame.ToB) (FiatGameHash "0") :: NoGameToServerMsg)
 startGame :: ToServerMsg
-startGame =  ToServerMsg $ encodeToText (ToServer.Msg System ToServer.StartGame (FiatGameHash "abc") :: NoGameToServerMsg)
+startGame =  ToServerMsg $ encodeToText (ToServer.Msg System ToServer.StartGame (FiatGameHash "") :: NoGameToServerMsg)
 updateSettings :: ToServerMsg
-updateSettings =  ToServerMsg $ encodeToText (ToServer.Msg System (ToServer.UpdateSettings changedSettings) (FiatGameHash "abc") :: NoGameToServerMsg)
+updateSettings =  ToServerMsg $ encodeToText (ToServer.Msg System (ToServer.UpdateSettings changedSettings) (FiatGameHash "") :: NoGameToServerMsg)
 
 day0 :: UTCTime
 day0 = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
@@ -72,64 +74,66 @@ day0 = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
 --SUCESS
 successResult :: NoGame.Settings -> Maybe (GameState NoGame.GameState NoGame.Move) -> Processed
 successResult s mgs
-  = Processed (ToFiatMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") s mgs :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move))) (Just successfulProcess)
+  = Processed (ToFiatMsg (encodeToText (ToClient.Msg hash s mgs :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move))) (Just successfulProcess)
   where
+    hash = FiatGameHash $ fromMaybe "" $ getHash <$> mgs
+    getHash (GameState _ (NoGame.GameState _ _ t) _) =  T.pack $ show t
     successfulProcess = SuccessfulProcessed stage fromfiat (over _2 (ToServerMsg . encodeToText) <$> fMv)
-    fromfiat = FromFiat (SettingsMsg $ encodeToText s) (GameStateMsg . encodeToText <$> mgs) (FiatGameHash "abc")
+    fromfiat = FromFiat (SettingsMsg $ encodeToText s) (GameStateMsg . encodeToText <$> mgs) hash
     fMv :: Maybe (UTCTime, ToServer.Msg NoGame.Settings NoGame.Move)
-    fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) (FiatGameHash "abc"))) (join (futureMove <$> mgs))
+    fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) hash)) (join (futureMove <$> mgs))
     stage = maybe SettingUp (\(FiatGame.Types.GameState st _ _) -> st) mgs
 
 goodProcessToServer :: IO Processed
-goodProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) goodMove
+goodProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "0")) goodMove
 goodToClientMsg :: IO ToClientMsg
 goodToClientMsg = goodProcessToServer >>= NoGame.toClientMsg (FiatPlayer 0)  . view processedToClientMsg
 startGameProcessToServer :: IO Processed
-startGameProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat twoFiatPlayerSettingsMsg Nothing (FiatGameHash "abc")) startGame
+startGameProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat twoFiatPlayerSettingsMsg Nothing (FiatGameHash "")) startGame
 updateSettingsProcessToServer :: IO Processed
-updateSettingsProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg Nothing (FiatGameHash "abc")) updateSettings
+updateSettingsProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg Nothing (FiatGameHash "")) updateSettings
 systemAllowedProcessToServer :: IO Processed
-systemAllowedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) systemMove
+systemAllowedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "")) systemMove
 moveOnOthersBehalfProcessToServer :: IO Processed
-moveOnOthersBehalfProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) goodMove
+moveOnOthersBehalfProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "0")) goodMove
 
 toClientMsgGoodNothing :: IO ToClientMsg
-toClientMsgGoodNothing = NoGame.toClientMsg  (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") NoGame.initSettings Nothing :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move )
+toClientMsgGoodNothing = NoGame.toClientMsg  (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "") NoGame.initSettings Nothing :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move )
 toClientMsgGoodJust :: IO ToClientMsg
-toClientMsgGoodJust = NoGame.toClientMsg (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") NoGame.initSettings (Just initialState) ::  ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move)
+toClientMsgGoodJust = NoGame.toClientMsg (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "") NoGame.initSettings (Just initialState) ::  ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move)
 
 --FAILURES
 failResult :: FiatPlayer -> ToClient.Error -> Processed
 failResult p err = Processed (ToFiatMsg $ encodeToText (ToClient.Error p err :: NoGame.ClientMsg)) Nothing
 
 failedToStartProcessToServer :: IO Processed
-failedToStartProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg Nothing (FiatGameHash "abc")) startGame
+failedToStartProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg Nothing (FiatGameHash "")) startGame
 unauthorizedProcessToServer :: IO Processed
-unauthorizedProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) unauthorizedMove
+unauthorizedProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "")) unauthorizedMove
 notYourTurnProcessToServer :: IO Processed
-notYourTurnProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 1)) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) unauthorizedMove
+notYourTurnProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 1)) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "0")) unauthorizedMove
 invalidProcessToServer :: IO Processed
-invalidProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) invalidMove
+invalidProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "0")) invalidMove
 gameNotStartedProcessToServer :: IO Processed
-gameNotStartedProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg Nothing (FiatGameHash "abc")) invalidMove
+gameNotStartedProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 0)) (FromFiat initSettingsMsg Nothing (FiatGameHash "0")) invalidMove
 gameAlreadyStartedProcessToServer :: IO Processed
-gameAlreadyStartedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) startGame
+gameAlreadyStartedProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "")) startGame
 decodeErrorProcessToServer :: IO Processed
-decodeErrorProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 1)) (FromFiat initSettingsMsg (Just (GameStateMsg "")) (FiatGameHash "abc")) (ToServerMsg "")
+decodeErrorProcessToServer = NoGame.processToServer (MoveSubmittedBy (FiatPlayer 1)) (FromFiat initSettingsMsg (Just (GameStateMsg "")) (FiatGameHash "")) (ToServerMsg "")
 
 main :: IO ()
 main = hspec $ do
   describe "processToServer" $ do
     it "good"
-      $  goodProcessToServer `shouldReturn` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False ()) Nothing)
+      $  goodProcessToServer `shouldReturn` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False () 1) Nothing)
     it "start game"
-      $  startGameProcessToServer `shouldReturn` successResult twoFiatPlayersSettingsAfter (Just $ GameState Playing (NoGame.GameState True ()) Nothing)
+      $  startGameProcessToServer `shouldReturn` successResult twoFiatPlayersSettingsAfter (Just $ GameState Playing (NoGame.GameState True () 0) Nothing)
     it "update settings"
       $  updateSettingsProcessToServer `shouldReturn` successResult changedSettings Nothing
     it "system allowed"
-      $  systemAllowedProcessToServer `shouldReturn` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False ()) Nothing)
+      $  systemAllowedProcessToServer `shouldReturn` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False () 1) Nothing)
     it "system allowed to move on other's behalf"
-      $  moveOnOthersBehalfProcessToServer `shouldReturn` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False ()) Nothing)
+      $  moveOnOthersBehalfProcessToServer `shouldReturn` successResult NoGame.initSettings (Just $ GameState Playing (NoGame.GameState False () 1) Nothing)
     it "failed to start game"
       $  failedToStartProcessToServer `shouldReturn` failResult System (ToClient.FailedToInitialize "Not enough players")
     it "unauthorized"
@@ -151,8 +155,8 @@ main = hspec $ do
       $ badSettings `shouldReturn` Nothing
   describe "toClientMsg" $ do
     it "good - ToServer.MsgProcessed"
-      $  goodToClientMsg `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") initClientSettings (Just $ GameState Playing (NoGame.ClientGameState False) Nothing) :: NoGame.ClientMsg))
+      $  goodToClientMsg `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "1") initClientSettings (Just $ GameState Playing (NoGame.ClientGameState False) Nothing) :: NoGame.ClientMsg))
     it "good - SettingsAndState s Nothing"
-      $  toClientMsgGoodNothing `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") initClientSettings Nothing :: NoGame.ClientMsg))
+      $  toClientMsgGoodNothing `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "") initClientSettings Nothing :: NoGame.ClientMsg))
     it "good - SettingsAndState s (Just gs)"
-      $  toClientMsgGoodJust `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") initClientSettings (Just initialClientState) :: NoGame.ClientMsg))
+      $  toClientMsgGoodJust `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "") initClientSettings (Just initialClientState) :: NoGame.ClientMsg))
