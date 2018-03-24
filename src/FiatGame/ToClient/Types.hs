@@ -28,14 +28,14 @@ $(deriveJSON defaultOptions ''Error)
 
 data Msg s g mv
   = Error FiatPlayer Error
-  | Msg FiatGameHash (SettingsAndState s g mv)
+  | Msg FiatGameHash s (Maybe (GameState g mv))
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''Msg)
 
-fromMsg :: Msg s g mv -> Either (FiatPlayer,Error) (FiatGameHash, SettingsAndState s g mv)
-fromMsg (Error p e) = Left (p,e)
-fromMsg (Msg h s)   = Right (h,s)
+fromMsg :: Msg s g mv -> Either (FiatPlayer,Error) (FiatGameHash, s, Maybe (GameState g mv))
+fromMsg (Error p e)  = Left (p,e)
+fromMsg (Msg h s gs) = Right (h,s,gs)
 
-toMsg :: Either (FiatPlayer,Error) (FiatGameHash, SettingsAndState s g mv) -> Msg s g mv
-toMsg (Left (p,e))  = Error p e
-toMsg (Right (h,s)) = Msg h s
+toMsg :: Either (FiatPlayer,Error) (FiatGameHash, s, Maybe (GameState g mv)) -> Msg s g mv
+toMsg (Left (p,e))     = Error p e
+toMsg (Right (h,s,gs)) = Msg h s gs

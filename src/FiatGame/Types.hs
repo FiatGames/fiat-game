@@ -46,10 +46,6 @@ $(deriveJSON defaultOptions ''GameState)
 futureMove :: GameState g m -> Maybe (FutureMove m)
 futureMove (GameState _ _ m) = m
 
-data SettingsAndState s g m = SettingsAndState s (Maybe (GameState g m))
-  deriving (Eq,Show,Generic)
-$(deriveJSON defaultOptions ''SettingsAndState)
-
 newtype SettingsMsg = SettingsMsg { getSettingsMsg :: Text }
   deriving (Eq,Show,Generic)
 makeWrapped ''SettingsMsg

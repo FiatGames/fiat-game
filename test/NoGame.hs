@@ -70,8 +70,8 @@ instance FiatGame GameState Settings Move ClientGameState ClientSettings where
   initialGameState (Settings ps c ())
     | length ps < 2 = return $ Left "Not enough players"
     | otherwise = return $ Right (Settings ps (not c) (), FiatGame.GameState FiatGame.Playing (GameState True ()) Nothing)
-  toClientSettingsAndState _ (FiatGame.SettingsAndState (Settings ps c _) (Just (FiatGame.GameState stage (GameState b ()) mvs))) = return (FiatGame.SettingsAndState (ClientSettings ps c) (Just (FiatGame.GameState stage (ClientGameState b) mvs)))
-  toClientSettingsAndState _ (FiatGame.SettingsAndState (Settings ps c _) Nothing) = return (FiatGame.SettingsAndState (ClientSettings ps c) Nothing)
+  toClientSettingsAndState _ (Settings ps c _) (Just (FiatGame.GameState stage (GameState b ()) mvs))= return (ClientSettings ps c, Just (FiatGame.GameState stage (ClientGameState b) mvs))
+  toClientSettingsAndState _ (Settings ps c _) Nothing = return (ClientSettings ps c, Nothing)
   newHash _ = return $ FiatGame.FiatGameHash "abc"
 
 processToServer :: FiatGame.MoveSubmittedBy -> FiatGame.FromFiat -> FiatGame.ToServerMsg -> IO FiatGame.Processed

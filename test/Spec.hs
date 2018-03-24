@@ -72,7 +72,7 @@ day0 = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
 --SUCESS
 successResult :: NoGame.Settings -> Maybe (GameState NoGame.GameState NoGame.Move) -> Processed
 successResult s mgs
-  = Processed (ToFiatMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState s mgs) :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move))) (Just successfulProcess)
+  = Processed (ToFiatMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") s mgs :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move))) (Just successfulProcess)
   where
     successfulProcess = SuccessfulProcessed stage fromfiat (over _2 (ToServerMsg . encodeToText) <$> fMv)
     fromfiat = FromFiat (SettingsMsg $ encodeToText s) (GameStateMsg . encodeToText <$> mgs) (FiatGameHash "abc")
@@ -94,9 +94,9 @@ moveOnOthersBehalfProcessToServer :: IO Processed
 moveOnOthersBehalfProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg (Just initialStateMsg) (FiatGameHash "abc")) goodMove
 
 toClientMsgGoodNothing :: IO ToClientMsg
-toClientMsgGoodNothing = NoGame.toClientMsg  (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState NoGame.initSettings Nothing) :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move )
+toClientMsgGoodNothing = NoGame.toClientMsg  (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") NoGame.initSettings Nothing :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move )
 toClientMsgGoodJust :: IO ToClientMsg
-toClientMsgGoodJust = NoGame.toClientMsg (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState NoGame.initSettings (Just initialState)) ::  ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move)
+toClientMsgGoodJust = NoGame.toClientMsg (FiatPlayer 1) $ ToFiatMsg $ encodeToText (ToClient.Msg (FiatGameHash "abc") NoGame.initSettings (Just initialState) ::  ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move)
 
 --FAILURES
 failResult :: FiatPlayer -> ToClient.Error -> Processed
@@ -151,8 +151,8 @@ main = hspec $ do
       $ badSettings `shouldReturn` Nothing
   describe "toClientMsg" $ do
     it "good - ToServer.MsgProcessed"
-      $  goodToClientMsg `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") $ SettingsAndState initClientSettings $ Just $ GameState Playing (NoGame.ClientGameState False) Nothing :: NoGame.ClientMsg))
+      $  goodToClientMsg `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") initClientSettings (Just $ GameState Playing (NoGame.ClientGameState False) Nothing) :: NoGame.ClientMsg))
     it "good - SettingsAndState s Nothing"
-      $  toClientMsgGoodNothing `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState initClientSettings Nothing) :: NoGame.ClientMsg))
+      $  toClientMsgGoodNothing `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") initClientSettings Nothing :: NoGame.ClientMsg))
     it "good - SettingsAndState s (Just gs)"
-      $  toClientMsgGoodJust `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") (SettingsAndState initClientSettings (Just initialClientState)) :: NoGame.ClientMsg))
+      $  toClientMsgGoodJust `shouldReturn` ToClientMsg (encodeToText (ToClient.Msg (FiatGameHash "abc") initClientSettings (Just initialClientState) :: NoGame.ClientMsg))
