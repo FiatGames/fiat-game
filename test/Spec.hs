@@ -1,21 +1,16 @@
-{-# LANGUAGE DeriveGeneric         #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE InstanceSigs          #-}
 {-# LANGUAGE MultiParamTypeClasses #-}
 {-# LANGUAGE OverloadedStrings     #-}
-{-# LANGUAGE TemplateHaskell       #-}
 
 import           Control.Lens
 import           Control.Monad
-import           Control.Monad.Identity
 import           Control.Monad.Trans.Maybe
 import           Data.Aeson
 import           Data.ByteString.Lazy      (toStrict)
 import           Data.Maybe
-import           Data.Text                 (Text)
 import qualified Data.Text                 as T
 import           Data.Text.Encoding
-import           Data.Time.Calendar
 import           Data.Time.Clock
 import           FiatGame.Class
 import qualified FiatGame.ToClient.Types   as ToClient
@@ -67,14 +62,10 @@ startGame =  ToServerMsg $ encodeToText (ToServer.Msg System ToServer.StartGame 
 updateSettings :: ToServerMsg
 updateSettings =  ToServerMsg $ encodeToText (ToServer.Msg System (ToServer.UpdateSettings changedSettings) (FiatGameHash "") :: NoGameToServerMsg)
 
-day0 :: UTCTime
-day0 = UTCTime (ModifiedJulianDay 0) (secondsToDiffTime 0)
-
-
 --SUCESS
 successResult :: NoGame.Settings -> Maybe (GameState NoGame.GameState NoGame.Move) -> Processed
 successResult s mgs
-  = Processed (ToFiatMsg (encodeToText (ToClient.Msg hash s mgs :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move))) (Just successfulProcess)
+  = Processed (ToFiatMsg (encodeToText (ToClient.Msg hash s mgs :: ToClient.Msg NoGame.Settings NoGame.GameState NoGame.Move))) (Just successfulProcess) False
   where
     hash = FiatGameHash $ fromMaybe "" $ getHash <$> mgs
     getHash (GameState _ (NoGame.GameState _ _ t) _) =  T.pack $ show t
@@ -104,7 +95,7 @@ toClientMsgGoodJust = NoGame.toClientMsg (FiatPlayer 1) $ ToFiatMsg $ encodeToTe
 
 --FAILURES
 failResult :: FiatPlayer -> ToClient.Error -> Processed
-failResult p err = Processed (ToFiatMsg $ encodeToText (ToClient.Error p err :: NoGame.ClientMsg)) Nothing
+failResult p err = Processed (ToFiatMsg $ encodeToText (ToClient.Error p err :: NoGame.ClientMsg)) Nothing (case err of ToClient.GameStateOutOfDate -> True; _ -> False)
 
 failedToStartProcessToServer :: IO Processed
 failedToStartProcessToServer = NoGame.processToServer (MoveSubmittedBy System) (FromFiat initSettingsMsg Nothing (FiatGameHash "")) startGame

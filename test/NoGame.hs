@@ -7,13 +7,10 @@
 {-# LANGUAGE TypeFamilies          #-}
 
 module NoGame where
-import           Control.Monad.Identity
 import           Data.Aeson
 import           Data.Aeson.TH
 import           Data.Proxy
-import           Data.Text               (Text)
 import qualified Data.Text               as T
-import           Data.Time.Clock
 import           FiatGame.Class          as FiatGame
 import qualified FiatGame.ToClient.Types as ToClient
 import qualified FiatGame.Types          as FiatGame
@@ -72,8 +69,8 @@ instance FiatGame Settings where
   isMoveValid _ _ (FiatGame.GameState _ (GameState True _ _) _) ToB  = return True
   isMoveValid _ _ (FiatGame.GameState _ (GameState False _ _) _) ToA = return True
   isMoveValid _ _ _ _                                  = return False
-  isPlayersTurn (FiatGame.FiatPlayer 0) _ (FiatGame.GameState _ (GameState True () t) _) _ = return True
-  isPlayersTurn (FiatGame.FiatPlayer 1) _ (FiatGame.GameState _ (GameState False _ t) _) _ = return True
+  isPlayersTurn (FiatGame.FiatPlayer 0) _ (FiatGame.GameState _ (GameState True () _) _) _ = return True
+  isPlayersTurn (FiatGame.FiatPlayer 1) _ (FiatGame.GameState _ (GameState False _ _) _) _ = return True
   isPlayersTurn _ _ _ _                                         = return False
   initialGameState (Settings ps c ())
     | length ps < 2 = return $ Left "Not enough players"

@@ -91,7 +91,7 @@ class
     return $ SettingsMsg $ encodeToText added
 
   gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> IO Processed
-  gameStateIsOutOfDate _ p = return $ Processed (ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s (State s) (Move s))) Nothing
+  gameStateIsOutOfDate _ p = return $ Processed (ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s (State s) (Move s))) Nothing True
 
   processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> IO Processed
   processToServer _ submittedBy@(MoveSubmittedBy mvP) fiat (ToServerMsg ecmsg) = do
@@ -126,12 +126,13 @@ class
             return (h',s, Just gs')
     let msg = ToFiatMsg $ encodeToText $ ToClient.toMsg toChannel
     case toChannel of
-      Left _                      -> return $ Processed msg Nothing
+      Left (_,ToClient.GameStateOutOfDate)                      -> return $ Processed msg Nothing True
+      Left _                      -> return $ Processed msg Nothing False
       Right (h',s, mgs) -> do
         let stage = maybe SettingUp (\(FiatGame.Types.GameState st _ _) -> st) mgs
             fMv :: Maybe (UTCTime, ToServer.Msg s (Move s))
             fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) h')) (join (futureMove <$> mgs))
-        return $ Processed msg (Just $ SuccessfulProcessed stage (FromFiat (SettingsMsg (encodeToText s)) (GameStateMsg . encodeToText <$> mgs) h') (over _2 (ToServerMsg . encodeToText) <$> fMv))
+        return $ Processed msg (Just $ SuccessfulProcessed stage (FromFiat (SettingsMsg (encodeToText s)) (GameStateMsg . encodeToText <$> mgs) h') (over _2 (ToServerMsg . encodeToText) <$> fMv)) False
 
 boolToEither :: a -> Bool -> Either a ()
 boolToEither _ True  = Right ()

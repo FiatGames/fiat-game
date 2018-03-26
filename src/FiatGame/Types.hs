@@ -86,8 +86,9 @@ data SuccessfulProcessed = SuccessfulProcessed
 makeLenses ''SuccessfulProcessed
 
 data Processed = Processed
-  { _processedToClientMsg :: ToFiatMsg
-  , _processedSuccessFul  :: Maybe SuccessfulProcessed
+  { _processedToClientMsg        :: ToFiatMsg
+  , _processedSuccessFul         :: Maybe SuccessfulProcessed
+  , _processedGameStateOutOfDate :: Bool
   }
   deriving (Eq,Show,Generic)
 makeLenses ''Processed
