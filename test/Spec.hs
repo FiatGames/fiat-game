@@ -16,7 +16,7 @@ import           FiatGame.Class
 import qualified FiatGame.ToClient.Types   as ToClient
 import qualified FiatGame.ToServer.Types   as ToServer
 import           FiatGame.Types
-import qualified NoGame                    as NoGame
+import qualified NoGame
 import           Test.Hspec
 
 type NoGameToServerMsg = ToServer.Msg NoGame.Settings NoGame.Move

@@ -37,24 +37,39 @@ class
   type ClientSettings s :: *
   type ClientState s :: *
 
-  defaultSettings :: IO s
-  addPlayer :: FiatPlayer -> s -> IO (Maybe s)
-  initialGameState :: s -> IO (Either Text (s, GameState (State s) (Move s)))
-  makeMove :: FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> IO (GameState (State s) (Move s))
-  isPlayersTurn :: FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> IO Bool
-  isMoveValid :: FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> IO Bool
-  toClientSettingsAndState :: FiatPlayer -> s -> Maybe (GameState (State s) (Move s)) -> IO (ClientSettings s, Maybe (GameState (ClientState s) (Move s)))
+  defaultSettings :: (MonadIO m) => m s
+  addPlayer :: (MonadIO m) =>FiatPlayer -> s -> m (Maybe s)
+  initialGameState :: (MonadIO m) => s -> m (Either Text (s, GameState (State s) (Move s)))
+  makeMove :: (MonadIO m) => FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> m (GameState (State s) (Move s))
+  isPlayersTurn :: (MonadIO m) => FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> m Bool
+  isMoveValid :: (MonadIO m) => FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> m Bool
+  toClientSettingsAndState :: (MonadIO m) => FiatPlayer -> s -> Maybe (GameState (State s) (Move s)) -> m (ClientSettings s, Maybe (GameState (ClientState s) (Move s)))
 
-  newHash :: s -> Maybe (GameState (State s) (Move s)) -> IO FiatGameHash
-  newHash _ _ = FiatGameHash . toText <$> nextRandom
-
-  isCmdAuthorized :: MoveSubmittedBy -> s -> Maybe (GameState (State s) (Move s)) -> ToServer.Msg s (Move s) -> IO Bool
-  isCmdAuthorized (MoveSubmittedBy System) _  _ _ = return True
+  isCmdAuthorized :: MoveSubmittedBy -> s -> Maybe (GameState (State s) (Move s)) -> ToServer.Msg s (Move s) -> Bool
+  isCmdAuthorized (MoveSubmittedBy System) _  _ _ = True
   isCmdAuthorized (MoveSubmittedBy (FiatPlayer p1)) _ _ fc = case ToServer.player fc of
-    System          -> return False
-    (FiatPlayer p2) -> return $ p1 == p2
+    System          -> False
+    (FiatPlayer p2) -> p1 == p2
 
-  toClientMsg :: Proxy s -> FiatPlayer -> ToFiatMsg -> IO ToClientMsg
+  fromFiat :: Proxy s -> FiatPlayer -> FromFiat -> ToFiatMsg
+  fromFiat _ p ff =
+    let (msg :: ToClient.Msg s (State s) (Move s)) = fromFiatToMsg p ff
+    in ToFiatMsg $ encodeToText msg
+
+  fromFiatToMsg :: FiatPlayer -> FromFiat -> ToClient.Msg s (State s) (Move s)
+  fromFiatToMsg p ff = either (ToClient.Error p .ToClient.DecodeError) id $ mkMsg <$> es <*> megs
+    where
+      mkMsg = ToClient.Msg (ff^.fromFiatGameHash)
+      es = eitherDecodeFromText $ ff^.fromFiatSettings._Wrapped'
+      megs = fromMaybe (Right Nothing) $ eitherDecodeFromText <$> ff^?fromFiatGameState._Just._Wrapped'
+
+  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> Processed
+  gameStateIsOutOfDate _ p = Processed (ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s (State s) (Move s))) Nothing True
+
+  newHash :: (MonadIO m) => s -> Maybe (GameState (State s) (Move s)) -> m FiatGameHash
+  newHash _ _ = FiatGameHash . toText <$> liftIO nextRandom
+
+  toClientMsg :: (MonadIO m) => Proxy s -> FiatPlayer -> ToFiatMsg -> m ToClientMsg
   toClientMsg _ p (ToFiatMsg etcmsg) = case tcmsg of
     Left err  -> return $ ToClientMsg $ encodeToText (ToClient.Error p $ ToClient.DecodeError err :: ToClient.Msg (ClientSettings s) (State s) (Move s))
     Right e@(ToClient.Error _ _) -> return $ ToClientMsg $ encodeToText e
@@ -65,40 +80,27 @@ class
       tcmsg :: Either Text (ToClient.Msg s (State s) (Move s))
       tcmsg = eitherDecodeFromText etcmsg
 
-  fromFiat :: Proxy s -> FiatPlayer -> FromFiat -> IO ToFiatMsg
-  fromFiat _ p ff =  do
-    (msg :: ToClient.Msg s (State s) (Move s)) <- fromFiatToMsg p ff
-    return $ ToFiatMsg $ encodeToText msg
-
-  fromFiatToMsg :: FiatPlayer -> FromFiat -> IO (ToClient.Msg s (State s) (Move s))
-  fromFiatToMsg p ff = return $ either (ToClient.Error p .ToClient.DecodeError) id $ mkMsg <$> es <*> megs
-    where
-      mkMsg = ToClient.Msg (ff^.fromFiatGameHash)
-      es = eitherDecodeFromText $ ff^.fromFiatSettings._Wrapped'
-      megs = fromMaybe (Right Nothing) $ eitherDecodeFromText <$> ff^?fromFiatGameState._Just._Wrapped'
-
-  initialFromFiat :: Proxy s -> FiatPlayer -> IO (FiatGameHash, SettingsMsg)
+  initialFromFiat :: (MonadIO m) => Proxy s -> FiatPlayer -> m (Maybe (FiatGameHash, SettingsMsg))
   initialFromFiat _ p = do
     s :: s <- defaultSettings
-    (Just s') <- addPlayer p s
-    h <- newHash s' Nothing
-    return (h, SettingsMsg $ encodeToText s')
+    addPlayer p s >>= \case
+      Nothing -> pure Nothing
+      Just s' -> do
+        h <- newHash s' Nothing
+        pure $ Just (h, SettingsMsg $ encodeToText s')
 
-  tryAddPlayer :: Proxy s -> FiatPlayer -> SettingsMsg -> IO (Maybe SettingsMsg)
+  tryAddPlayer :: (MonadIO m) => Proxy s -> FiatPlayer -> SettingsMsg -> m (Maybe SettingsMsg)
   tryAddPlayer _ p (SettingsMsg es) = runMaybeT $ do
     s :: s <- MaybeT $ return $ hush $ eitherDecodeFromText es
     added <- MaybeT $ addPlayer p s
     return $ SettingsMsg $ encodeToText added
 
-  gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> IO Processed
-  gameStateIsOutOfDate _ p = return $ Processed (ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s (State s) (Move s))) Nothing True
-
-  processToServer :: Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> IO Processed
+  processToServer :: (MonadIO m) => Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m Processed
   processToServer _ submittedBy@(MoveSubmittedBy mvP) fiat (ToServerMsg ecmsg) = do
     (toChannel ::  Either (FiatPlayer,ToClient.Error) (FiatGameHash, s, Maybe (GameState (State s) (Move s)))) <- runExceptT $ do
-      (h, s, mgs) <- ExceptT $ ToClient.fromMsg <$> fromFiatToMsg mvP fiat
+      (h, s, mgs) <- ExceptT $ pure $ ToClient.fromMsg $ fromFiatToMsg mvP fiat
       cmsg <- ExceptT $ return $ over _Left (\err -> (mvP,ToClient.DecodeError err)) $ eitherDecodeFromText ecmsg
-      ExceptT $ boolToEither (mvP,ToClient.Unauthorized) <$> isCmdAuthorized submittedBy s mgs cmsg
+      ExceptT $ pure $ boolToEither (mvP,ToClient.Unauthorized) $ isCmdAuthorized submittedBy s mgs cmsg
       let p = ToServer.player cmsg
       if h /= ToServer.hash cmsg
       then ExceptT $ return $ Left (mvP,ToClient.GameStateOutOfDate)
@@ -144,5 +146,6 @@ hush (Right b) = Just b
 
 encodeToText :: (ToJSON a) => a -> Text
 encodeToText = decodeUtf8 . toStrict . encode
+
 eitherDecodeFromText :: (FromJSON a) => Text -> Either Text a
 eitherDecodeFromText = over _Left pack . eitherDecodeStrict . encodeUtf8
