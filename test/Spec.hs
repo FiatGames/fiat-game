@@ -72,7 +72,7 @@ successResult s mgs
     successfulProcess = SuccessfulProcessed stage fromfiat (over _2 (ToServerMsg . encodeToText) <$> fMv)
     fromfiat = FromFiat (SettingsMsg $ encodeToText s) (GameStateMsg . encodeToText <$> mgs) hash
     fMv :: Maybe (UTCTime, ToServer.Msg NoGame.Settings NoGame.Move)
-    fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) hash)) (join (futureMove <$> mgs))
+    fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) hash)) (join (view gameStateFutureMove <$> mgs))
     stage = maybe SettingUp (\(FiatGame.Types.GameState st _ _) -> st) mgs
 
 goodProcessToServer :: IO Processed

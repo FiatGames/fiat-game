@@ -1,18 +1,20 @@
-{-# LANGUAGE DeriveFunctor          #-}
-{-# LANGUAGE DeriveGeneric          #-}
-{-# LANGUAGE FlexibleInstances      #-}
-{-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE LambdaCase             #-}
-{-# LANGUAGE MultiParamTypeClasses  #-}
-{-# LANGUAGE OverloadedStrings      #-}
-{-# LANGUAGE TemplateHaskell        #-}
-{-# LANGUAGE TypeFamilies           #-}
+{-# LANGUAGE DeriveFunctor              #-}
+{-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE FunctionalDependencies     #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeFamilies               #-}
 
 module FiatGame.Types where
 
 import           Control.Lens.TH
 import           Data.Aeson
 import           Data.Aeson.TH
+import           Data.Char       (toLower)
 import           Data.Text       (Text)
 import           Data.Time.Clock
 import           GHC.Generics
@@ -23,8 +25,7 @@ data FiatPlayer = FiatPlayer Int64 | System
 $(deriveJSON defaultOptions ''FiatPlayer)
 
 newtype FiatGameHash = FiatGameHash Text
-  deriving (Eq,Ord,Show,Generic)
-$(deriveJSON defaultOptions ''FiatGameHash)
+  deriving (Eq,Ord,Show,Generic,ToJSON,FromJSON)
 makeWrapped ''FiatGameHash
 
 data FutureMove m = FutureMove
@@ -32,19 +33,21 @@ data FutureMove m = FutureMove
   , _futureMoveMove :: m
   }
   deriving (Eq,Show,Generic)
-$(deriveJSON defaultOptions ''FutureMove)
+$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . camelTo2 '_' . drop 11} ''FutureMove)
 makeLenses ''FutureMove
 
 data GameStage = SettingUp | Playing | Done
   deriving (Show, Read, Eq, Generic)
 $(deriveJSON defaultOptions ''GameStage)
 
-data GameState g m = GameState GameStage g (Maybe (FutureMove m))
+data GameState g m = GameState
+  { _gameStateStage      :: GameStage
+  , _gameStateState      :: g
+  , _gameStateFutureMove :: Maybe (FutureMove m)
+  }
   deriving (Eq,Show,Generic)
-$(deriveJSON defaultOptions ''GameState)
-
-futureMove :: GameState g m -> Maybe (FutureMove m)
-futureMove (GameState _ _ m) = m
+$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . camelTo2 '_' . drop 10} ''GameState)
+makeLenses ''GameState
 
 newtype SettingsMsg = SettingsMsg { getSettingsMsg :: Text }
   deriving (Eq,Show,Generic)

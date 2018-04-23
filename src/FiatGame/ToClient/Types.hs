@@ -27,8 +27,15 @@ data Error = GameIsNotStarted
 $(deriveJSON defaultOptions ''Error)
 
 data Msg s g mv
-  = Error FiatPlayer Error
-  | Msg FiatGameHash s (Maybe (GameState g mv))
+  = Error
+    { player :: FiatPlayer
+    , error  :: Error
+    }
+  | Msg
+    { hash     :: FiatGameHash
+    , settings :: s
+    , state    :: Maybe (GameState g mv)
+    }
   deriving (Eq,Show,Generic)
 $(deriveJSON defaultOptions ''Msg)
 

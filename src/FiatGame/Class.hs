@@ -133,7 +133,7 @@ class
       Right (h',s, mgs) -> do
         let stage = maybe SettingUp (\(FiatGame.Types.GameState st _ _) -> st) mgs
             fMv :: Maybe (UTCTime, ToServer.Msg s (Move s))
-            fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) h')) (join (futureMove <$> mgs))
+            fMv = fmap (\f -> (f^.futureMoveTime, ToServer.Msg System (ToServer.MakeMove (f^.futureMoveMove)) h')) (join (view gameStateFutureMove <$> mgs))
         return $ Processed msg (Just $ SuccessfulProcessed stage (FromFiat (SettingsMsg (encodeToText s)) (GameStateMsg . encodeToText <$> mgs) h') (over _2 (ToServerMsg . encodeToText) <$> fMv)) False
 
 boolToEither :: a -> Bool -> Either a ()
