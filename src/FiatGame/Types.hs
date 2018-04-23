@@ -33,7 +33,7 @@ data FutureMove m = FutureMove
   , _futureMoveMove :: m
   }
   deriving (Eq,Show,Generic)
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . camelTo2 '_' . drop 11} ''FutureMove)
+$(deriveJSON defaultOptions ''FutureMove)
 makeLenses ''FutureMove
 
 data GameStage = SettingUp | Playing | Done
@@ -46,7 +46,7 @@ data GameState g m = GameState
   , _gameStateFutureMove :: Maybe (FutureMove m)
   }
   deriving (Eq,Show,Generic)
-$(deriveJSON defaultOptions{fieldLabelModifier = map toLower . camelTo2 '_' . drop 10} ''GameState)
+$(deriveJSON defaultOptions ''GameState)
 makeLenses ''GameState
 
 newtype SettingsMsg = SettingsMsg { getSettingsMsg :: Text }
