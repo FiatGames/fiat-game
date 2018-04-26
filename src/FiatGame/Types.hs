@@ -14,7 +14,6 @@ module FiatGame.Types where
 import           Control.Lens.TH
 import           Data.Aeson
 import           Data.Aeson.TH
-import           Data.Char       (toLower)
 import           Data.Text       (Text)
 import           Data.Time.Clock
 import           GHC.Generics
