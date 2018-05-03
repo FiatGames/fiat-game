@@ -7,6 +7,7 @@
 {-# LANGUAGE TypeFamilies          #-}
 
 module NoGame where
+import           Control.Monad.Reader
 import           Data.Aeson
 import           Data.Aeson.TH
 import           Data.Proxy
@@ -59,6 +60,7 @@ instance FiatGame Settings where
   type State Settings = NoGame.GameState
   type ClientState Settings = NoGame.ClientGameState
   type ClientSettings Settings = NoGame.ClientSettings
+  type Environment Settings = ()
 
   defaultSettings = return initSettings
   addPlayer p (Settings ps c ())
@@ -81,6 +83,6 @@ instance FiatGame Settings where
   newHash _ (Just (FiatGame.GameState _ (GameState _ _ t) _)) = return $ FiatGame.FiatGameHash $ T.pack $ show t
 
 processToServer :: FiatGame.MoveSubmittedBy -> FiatGame.FromFiat -> FiatGame.ToServerMsg -> IO FiatGame.Processed
-processToServer = FiatGame.processToServer (Proxy :: Proxy Settings)
+processToServer a b c = flip runReaderT () $ FiatGame.processToServer (Proxy :: Proxy Settings) a b c
 toClientMsg :: FiatGame.FiatPlayer -> FiatGame.ToFiatMsg -> IO FiatGame.ToClientMsg
-toClientMsg = FiatGame.toClientMsg (Proxy :: Proxy Settings)
+toClientMsg a b = flip runReaderT () $ FiatGame.toClientMsg (Proxy :: Proxy Settings) a b

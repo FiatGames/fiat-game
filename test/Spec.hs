@@ -5,6 +5,7 @@
 
 import           Control.Lens
 import           Control.Monad
+import           Control.Monad.Reader
 import           Control.Monad.Trans.Maybe
 import           Data.Aeson
 import           Data.ByteString.Lazy      (toStrict)
@@ -36,12 +37,12 @@ twoFiatPlayersSettingsAfter = NoGame.Settings [FiatPlayer 0, FiatPlayer 1] True 
 
 goodSettings :: IO (Maybe NoGame.Settings)
 goodSettings = do
-  i <- defaultSettings
-  runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1]
+  i <- runReaderT defaultSettings ()
+  runMaybeT $ foldM (\s p -> MaybeT $ runReaderT (addPlayer p s) ()) i [FiatPlayer 0, FiatPlayer 1]
 badSettings :: IO (Maybe NoGame.Settings)
 badSettings = do
-    i <- defaultSettings
-    runMaybeT $ foldM (\s p -> MaybeT $ addPlayer p s) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
+    i <- runReaderT defaultSettings ()
+    runMaybeT $ foldM (\s p -> MaybeT $  runReaderT (addPlayer p s) ()) i [FiatPlayer 0, FiatPlayer 1, FiatPlayer 2]
 
 initialState  :: GameState NoGame.GameState NoGame.Move
 initialState = GameState Playing (NoGame.GameState True () 0) Nothing

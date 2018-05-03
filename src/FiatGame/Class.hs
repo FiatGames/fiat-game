@@ -10,6 +10,7 @@ module FiatGame.Class where
 
 import           Control.Lens
 import           Control.Monad.Except
+import           Control.Monad.Reader
 import           Control.Monad.Trans.Maybe
 import           Data.Aeson
 import           Data.ByteString.Lazy      (toStrict)
@@ -36,14 +37,15 @@ class
   type Move s :: *
   type ClientSettings s :: *
   type ClientState s :: *
+  type Environment s :: *
 
-  defaultSettings :: (MonadIO m) => m s
-  addPlayer :: (MonadIO m) =>FiatPlayer -> s -> m (Maybe s)
-  initialGameState :: (MonadIO m) => s -> m (Either Text (s, GameState (State s) (Move s)))
-  makeMove :: (MonadIO m) => FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> m (GameState (State s) (Move s))
-  isPlayersTurn :: (MonadIO m) => FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> m Bool
-  isMoveValid :: (MonadIO m) => FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> m Bool
-  toClientSettingsAndState :: (MonadIO m) => FiatPlayer -> s -> Maybe (GameState (State s) (Move s)) -> m (ClientSettings s, Maybe (GameState (ClientState s) (Move s)))
+  defaultSettings :: (MonadIO m) => ReaderT (Environment s) m s
+  addPlayer :: (MonadIO m) =>FiatPlayer -> s -> ReaderT (Environment s) m (Maybe s)
+  initialGameState :: (MonadIO m) => s -> ReaderT (Environment s) m (Either Text (s, GameState (State s) (Move s)))
+  makeMove :: (MonadIO m) => FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> ReaderT (Environment s) m (GameState (State s) (Move s))
+  isPlayersTurn :: (MonadIO m) => FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> ReaderT (Environment s) m Bool
+  isMoveValid :: (MonadIO m) => FiatPlayer -> s -> GameState (State s) (Move s) -> Move s -> ReaderT (Environment s) m Bool
+  toClientSettingsAndState :: (MonadIO m) => FiatPlayer -> s -> Maybe (GameState (State s) (Move s)) -> ReaderT (Environment s) m (ClientSettings s, Maybe (GameState (ClientState s) (Move s)))
 
   isCmdAuthorized :: MoveSubmittedBy -> s -> Maybe (GameState (State s) (Move s)) -> ToServer.Msg s (Move s) -> Bool
   isCmdAuthorized (MoveSubmittedBy System) _  _ _ = True
@@ -66,10 +68,10 @@ class
   gameStateIsOutOfDate :: Proxy s -> FiatPlayer -> Processed
   gameStateIsOutOfDate _ p = Processed (ToFiatMsg $ encodeToText (ToClient.Error p ToClient.GameStateOutOfDate :: ToClient.Msg s (State s) (Move s))) Nothing True
 
-  newHash :: (MonadIO m) => s -> Maybe (GameState (State s) (Move s)) -> m FiatGameHash
+  newHash :: (MonadIO m) => s -> Maybe (GameState (State s) (Move s)) -> ReaderT (Environment s) m FiatGameHash
   newHash _ _ = FiatGameHash . toText <$> liftIO nextRandom
 
-  toClientMsg :: (MonadIO m) => Proxy s -> FiatPlayer -> ToFiatMsg -> m ToClientMsg
+  toClientMsg :: (MonadIO m) => Proxy s -> FiatPlayer -> ToFiatMsg -> ReaderT (Environment s) m ToClientMsg
   toClientMsg _ p (ToFiatMsg etcmsg) = case tcmsg of
     Left err  -> return $ ToClientMsg $ encodeToText (ToClient.Error p $ ToClient.DecodeError err :: ToClient.Msg (ClientSettings s) (State s) (Move s))
     Right e@(ToClient.Error _ _) -> return $ ToClientMsg $ encodeToText e
@@ -80,7 +82,7 @@ class
       tcmsg :: Either Text (ToClient.Msg s (State s) (Move s))
       tcmsg = eitherDecodeFromText etcmsg
 
-  initialFromFiat :: (MonadIO m) => Proxy s -> FiatPlayer -> m (Maybe (FiatGameHash, SettingsMsg))
+  initialFromFiat :: (MonadIO m) => Proxy s -> FiatPlayer -> ReaderT (Environment s) m (Maybe (FiatGameHash, SettingsMsg))
   initialFromFiat _ p = do
     s :: s <- defaultSettings
     addPlayer p s >>= \case
@@ -89,13 +91,13 @@ class
         h <- newHash s' Nothing
         pure $ Just (h, SettingsMsg $ encodeToText s')
 
-  tryAddPlayer :: (MonadIO m) => Proxy s -> FiatPlayer -> SettingsMsg -> m (Maybe SettingsMsg)
+  tryAddPlayer :: (MonadIO m) => Proxy s -> FiatPlayer -> SettingsMsg -> ReaderT (Environment s) m (Maybe SettingsMsg)
   tryAddPlayer _ p (SettingsMsg es) = runMaybeT $ do
     s :: s <- MaybeT $ return $ hush $ eitherDecodeFromText es
     added <- MaybeT $ addPlayer p s
     return $ SettingsMsg $ encodeToText added
 
-  processToServer :: (MonadIO m) => Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> m Processed
+  processToServer :: (MonadIO m) => Proxy s -> MoveSubmittedBy -> FromFiat -> ToServerMsg -> ReaderT (Environment s) m Processed
   processToServer _ submittedBy@(MoveSubmittedBy mvP) fiat (ToServerMsg ecmsg) = do
     (toChannel ::  Either (FiatPlayer,ToClient.Error) (FiatGameHash, s, Maybe (GameState (State s) (Move s)))) <- runExceptT $ do
       (h, s, mgs) <- ExceptT $ pure $ ToClient.fromMsg $ fromFiatToMsg mvP fiat
